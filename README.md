@@ -1,5 +1,5 @@
 # Ansible for Spotify
-Desktop Python script (not mobile phone app) that provides global hotkeys to manipulate Spotify playback and user library, including advanced playlist creation/manipulation (see section: Advanced functionality / library manipulation hotkeys). Although it could potentially be integrated or proted into some other application context.
+Desktop Python script (not mobile phone app) that provides global hotkeys to manipulate Spotify playback and user library, including advanced playlist creation/manipulation (see section: Advanced functionality / library manipulation hotkeys). Although it could potentially be integrated or ported into some other application context.
 
 # Installation / Usage
 Alas that it's not necessarily simple to set up or use. But, as an overview:
@@ -7,9 +7,8 @@ Alas that it's not necessarily simple to set up or use. But, as an overview:
 - Clone this repository
 - Install Python and the dependency libraries
 - Set up a Spotify Developer app with client id, secret, and web landing page / redirect URL
-- Run this script from the directory it is in:
-    python Ansible_for_Spotify.py
-- Examine the source code `bindings = [` section to figure out which of the function correspond to which of the below detailed hotkeys, and use said hotkeys while playing music from Spotify :)
+- Run this script from the directory it is in: `python Ansible_for_Spotify.py`
+- Examine the source code `bindings = [` section to figure out which of the function correspond to which of the below detailed hotkeys, and use said hotkeys while playing music from Spotify :) Sorry, at this writing if you don't like the hotkey assignments you must hack them to change them. (See TO DO.)
 
 # Current functionality and hotkeys/functions:
 ## General functionality
@@ -18,7 +17,7 @@ Alas that it's not necessarily simple to set up or use. But, as an overview:
 
 ## Library manipulation functionality / hotkeys
 
-See the see "bindings" comment/section in source code for details.
+See the see `bindings = [` comment/section in source code for details.
 
 ### Basic playback/library manipulation hotkeys
 - pause / resume playback
@@ -47,13 +46,13 @@ Also, a hotkey to exit the program.
 - multiple playlist definitions and associated playlist manipulation hotkeys?
 - figure out auth and client insantiation better such that it:
   - never crashes if possible
-  - prompts for auth renewal, if possible
-- fix KNOWN ISSUE: the Spotify API seems to routinely reject API authentication, at least the way it's set up here, effectively terminating session/control. More likely to happen after hourse of not using the API. Possible solutions [here](https://stackoverflow.com/questions/48883731/refresh-token-spotipy).
+  - maintians or consistently renews authorization (and/or prompts for auth renewal, if possible), to FIX KNOWN ISSUE: the Spotify API seems to routinely reject API authentication, at least the way it's set up here, effectively terminating session/control. More likely to happen after hours of not using the API. Possible solutions [here](https://stackoverflow.com/questions/48883731/refresh-token-spotipy).
 
 # WISH LIST
 Playlist building by advanced control / recommendation / parametric control, for example:
-- Build playlists from recommended songs (by base genre/songs seeds), using multigraphs of desired track attributes and genres over time. A sine wave of valence of songs, a constant linear rise of tempo, etc.
-- Use Spotify's own shuffle logic and user library information to build or extend another playlist: filter all liked tracks from a playlist into a temporary list, set shuffle mode, and append everything from the queue to the end of another playlist.
+- Build playlists from recommended songs (by base genre/songs seeds), using multigraphs of desired track attributes and genres over time. For example, a rising sine wave of valence of songs, a linear rise of songs tempo, etc.
+- Use Spotify's own shuffle logic and user library information to build or extend another playlist: filter all tracks in a playlist which are also in the "Liked Songs" library (playlist) into a temporary list, set shuffle mode, and append everything from the queue to the end of another playlist.
+   - Similar multigraphing of track attributes to build or extend a playlists that way
 
 ### See Also
 Things that inspired this:
@@ -62,4 +61,4 @@ Things that inspired this:
 
 # Why?
 
-Because I like to have absolute control of what music I try, and try _a lot_ of music, with _a lot_ of playlists, and these hotkeys help me burn through music I don't like likety-split, and find and listen to music I do like faster.
+Because I like to have absolute control of what music I try (instead of relying on nebulous, undefinable AI features--although those have found me many things I love), and try _a lot_ of music, with _a lot_ of playlists, and these hotkeys help me burn through music I don't like likety-split, and find and listen to music I do like faster.
