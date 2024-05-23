@@ -70,6 +70,9 @@ DISCARDS_PLAYLIST_ID = check_or_set_option('USER_VARIABLES', 'DISCARDS_PLAYLIST_
 API_SCOPE = "user-read-playback-state user-modify-playback-state user-read-currently-playing app-remote-control app-remote-control streaming playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-read-playback-position user-library-modify user-library-read"
 
 # PLAYLIST ID init as None, intended to be set by hotkey to any currently playing playlist:
+# TO DO: set/get these from .ini and user interaction:
+BACK_SEEK_MS = -23500
+FORWARD_SEEK_MS = 23500
 PLAYLIST_ID_1 = None
 PLAYLIST_ID_FRIENDLY_NAME = ""
 
@@ -167,6 +170,17 @@ def change_repeat_mode():
     state_parameter = REPEAT_MODES[current_repeat_mode_idx]
     # print('TAHT IS ', state_parameter)
     sp.repeat(state_parameter)
+
+# set playback position to start of current track
+def seek_to_track_start():
+    sp.seek_track(0)
+    info = sp.current_playback()['progress_ms']
+    print(info)
+
+# set playback position forward or backward by seek_ms (milleseconds, negative or positive)
+def relative_seek(seek_ms):
+    # nested function call here: set current playback progress to current + ms (with ms neg. or positive)
+    sp.seek_track(sp.current_playback()['progress_ms'] + seek_ms)
 
 # adapted from: https://github.com/spotipy-dev/spotipy/blob/master/examples/artist_discography.py
 # def get_artist(name):
@@ -449,7 +463,6 @@ def keepalive_attempt_hack_conditional_wiggle_seek():
 # TO USE??? recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs) re recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs)
 
 # Declare some key bindings.
-# For list of available keys see the section with that heading at https://pypi.org/project/global-hotkeys/
 # for bindings object structure see the "Explanation of the binding structure" section in the same page; to copy the variant for square brackets:
 # ["hotkey", on_press_callback, on_release_callback, actuate_on_partial_release, press_callback_params,release_callback_params]
 
@@ -461,23 +474,29 @@ def keepalive_attempt_hack_conditional_wiggle_seek():
 # and additional key chords are separated by commas. Spaces are ignored.
 
 # TO DO: hotkey that prints these bindings with descriptions :)
+# For list of available keys see the section with that heading at https://pypi.org/project/global-hotkeys/
+# also, binding structure: ["hotkey", on_press_callback, on_release_callback, actuate_on_partial_release, press_callback_params, release_callback_params]
+# NOTE: although the documentation for that function says the release callback parameter should be a dict, I could not get that to work and it accepted just a value for it. ?
 bindings = [
     # basic:
-    ["control + alt + home", None, pause_or_start_playback, True],
-    ["control + alt + numpad_5", None, save_track, True],
-    ["control + alt + numpad_0", None, unsave_track, True],
-    ["control + alt + page_up", None, previous_track, True],
-    ["control + alt + page_down", None, next_track, True],
-    ["control + alt + shift + p", None, change_repeat_mode, True],
+    ["control + alt + home", None, pause_or_start_playback, True, None, None],
+    ["control + alt + numpad_5", None, save_track, True, None, None],
+    ["control + alt + numpad_0", None, unsave_track, True, None, None],
+    ["control + alt + page_up", None, previous_track, True, None, None],
+    ["control + alt + page_down", None, next_track, True, None, None],
+    ["control + alt + shift + p", None, change_repeat_mode, True, None, None],
+    ["control + alt + insert", None, seek_to_track_start, True, None, None],
+    ["control + alt + left", None, relative_seek, True, None, BACK_SEEK_MS],
+    ["control + alt + right", None, relative_seek, True, None, FORWARD_SEEK_MS],
     # advanced:
-    ["control + alt + shift + r + y", None, remove_current_track_from_current_playlist, False],
-    ["control + alt + shift + x + y", None, unsave_and_move_from_current_playlist_to_discards, False],
-    ["control + alt + shift + s", None, set_playlist_1, True],
-    ["control + alt + shift + a", None, add_current_track_to_playlist_1, True],
-    ["control + alt + shift + m", None, shuffle_current_track_to_playlist_1, False],
-    ["control + alt + shift + c + y", None, make_discography_playlist, True],
-    ["control + alt + shift + i", None, print_information, True],
-    ["control + alt + shift + q", None, exit_program, True]
+    ["control + alt + shift + r + y", None, remove_current_track_from_current_playlist, False, None, None],
+    ["control + alt + shift + x + y", None, unsave_and_move_from_current_playlist_to_discards, False, None, None],
+    ["control + alt + shift + s", None, set_playlist_1, True, None, None],
+    ["control + alt + shift + a", None, add_current_track_to_playlist_1, True, None, None],
+    ["control + alt + shift + m", None, shuffle_current_track_to_playlist_1, False, None, None],
+    ["control + alt + shift + c + y", None, make_discography_playlist, True, None, None],
+    ["control + alt + shift + i", None, print_information, True, None, None],
+    ["control + alt + shift + q", None, exit_program, True, None, None]
 ]
 
 # Register all of our keybindings
