@@ -31,50 +31,72 @@ THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
 
 # !----------------------------------------------------------------------
 # BEGIN INI PARSER create / read variables from ini into global variables
-from configparser import ConfigParser
+from extended_configparser.parser import ExtendedConfigParser
 
 # instantiate
-config = ConfigParser()
+config = ExtendedConfigParser()
 
-# parse file (does nothing if no such file) :
+# check if config file exists; if not, create it blank; otherwise open it:
+if not os.path.exists('Ansible_for_Spotify.ini'):
+    with open('Ansible_for_Spotify.ini', 'w') as configfile:
+            config.write('')
+# parse file (does nothing if empty file) :
 config.read('Ansible_for_Spotify.ini')
 
-# function to check for options in section and create them if they don't exist; NOTE that config.read() must be run first:
-def check_or_set_option(SECTION_NAME, OPTION_NAME):
+# Function to check for options in section and create them if they don't exist. NOTES:
+# - config.read() must be run first.
+# - DESCRIPTIVE_COMMENT is optional, and if passed it will be used as a comment on the field in the .ini. If it not passed (if its value is None), no comment will be left for the field.
+# - REQUIRED, if passed as True, prompts the user for values to put in the config (.ini) if they don't exist. If passed as False, values are only read if found, but the user isn't prompted for any values).
+def set_option_if_not(SECTION_NAME, OPTION_NAME, DESCRIPTIVE_COMMENT = None, REQUIRED = False):
     # check for section and create it if it doesn't exist:
-    if not config.has_section(SECTION_NAME):
+    if not config.has_section(SECTION_NAME) and REQUIRED == True:
         config.add_section(SECTION_NAME)
-    if not config.has_option(SECTION_NAME, OPTION_NAME):
-        option_name = input(OPTION_NAME + " not set. Enter it:\n")
-        config.set(SECTION_NAME, OPTION_NAME, option_name)
+    if not config.has_option(SECTION_NAME, OPTION_NAME) and REQUIRED == True:
+        if DESCRIPTIVE_COMMENT != None:
+            print('\n' + DESCRIPTIVE_COMMENT)
+        option_value = input(OPTION_NAME + " not set. Enter it:\n")
+        config.set(SECTION_NAME, OPTION_NAME, option_value, comment = DESCRIPTIVE_COMMENT)
         with open('Ansible_for_Spotify.ini', 'w') as configfile:
             config.write(configfile)
-            print("Wrote section ", SECTION_NAME, "option/value ", OPTION_NAME, option_name, "To .ini and variable.")
-        return option_name
+            print("Wrote section ", SECTION_NAME, "option/value ", OPTION_NAME, option_value, "To .ini and variable.")
+        return option_value
     else:
-       option_name = config[SECTION_NAME][OPTION_NAME]
-       print("Read value for section/option ", SECTION_NAME, OPTION_NAME, " into variable.")
-       return option_name
+        try:
+            option_value = config[SECTION_NAME][OPTION_NAME]
+            print("Have read value for section/option ", SECTION_NAME, OPTION_NAME, " into variable.")
+            return option_value
+        except:
+            return None
+
+def set_option(SECTION_NAME, OPTION_NAME, OPTION_VALUE, DESCRIPTIVE_COMMENT = None):
+    if not config.has_section(SECTION_NAME):
+        config.add_section(SECTION_NAME)
+    config.set(SECTION_NAME, OPTION_NAME, OPTION_VALUE, comment = DESCRIPTIVE_COMMENT)
+    with open('Ansible_for_Spotify.ini', 'w') as configfile:
+        config.write(configfile)
+        print("Wrote section ", SECTION_NAME, "option/value ", OPTION_NAME, OPTION_VALUE, "To .ini and variable.")
+
 
 # SETTING GLOBALS HERE:
-USERNAME = check_or_set_option('API_VARIABLES', 'USERNAME')
+# function signature reference:
+# set_option_if_not(SECTION_NAME, OPTION_NAME, DESCRIPTIVE_COMMENT = None, REQUIRED = None):
+USERNAME = set_option_if_not('API_VARIABLES', 'USERNAME', 'Your spotify username, the probably long, unfriendly one, not your display username:', True)
 # print("rEAD Wrote section ", SECTION_NAME, " option ", OPTION_NAME, option_value, " to .ini.")
-CLIENT_ID = check_or_set_option('API_VARIABLES', 'CLIENT_ID')
-CLIENT_SECRET = check_or_set_option('API_VARIABLES', 'CLIENT_SECRET')
-REDIRECT_URI = check_or_set_option('API_VARIABLES', 'REDIRECT_URI')
+CLIENT_ID = set_option_if_not('API_VARIABLES', 'CLIENT_ID', 'API client ID for this application:', True)
+CLIENT_SECRET = set_option_if_not('API_VARIABLES', 'CLIENT_SECRET', 'API client secret for this application:', True)
+REDIRECT_URI = set_option_if_not('API_VARIABLES', 'REDIRECT_URI', 'URL to open on setup of API authentication:', True)
 # PLAYLIST ID that tracks which are removed from any currently playing playlist are shuffled to; a recycle bin of sorts:
-DISCARDS_PLAYLIST_ID = check_or_set_option('USER_VARIABLES', 'DISCARDS_PLAYLIST_ID')
+DISCARDS_PLAYLIST_ID = set_option_if_not('USER_VARIABLES', 'DISCARDS_PLAYLIST_ID', 'Playlist for tracks removed from playists and liked songs; effectively a recycle bin:', True)
+# REDIRECT_URI = set_option_if_not('API_VARIABLES', 'REDIRECT_URI', 'URL to open on setup of API authentication:')
+BACK_SEEK_MS = int(set_option_if_not('USER_VARIABLES', 'BACK_SEEK_MS', 'On skip back, skip this many ms e.g. 5000ms = 5 seconds:', True))
+FORWARD_SEEK_MS = int(set_option_if_not('USER_VARIABLES', 'FORWARD_SEEK_MS', 'On skip forward, skip this many ms e.g. 5000ms = 5 seconds:', True))
+# PLAYLIST_ID_1 will here be init as None from the function call if it's not found in the .ini; otherwise it will be set to what is found:
+PLAYLIST_ID_1 = set_option_if_not('USER_VARIABLES', 'PLAYLIST_ID_1', 'Optional playlist for track/library moves/deletes:', False)
 # END INI PARSER create / read variables from ini into global variables
 # !--------------------------------------------------------------------
 
 API_SCOPE = "user-read-playback-state user-modify-playback-state user-read-currently-playing app-remote-control app-remote-control streaming playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-read-playback-position user-library-modify user-library-read"
 
-# PLAYLIST ID init as None, intended to be set by hotkey to any currently playing playlist:
-# TO DO: set/get these from .ini and user interaction:
-BACK_SEEK_MS = -23500
-FORWARD_SEEK_MS = 23500
-PLAYLIST_ID_1 = None
-PLAYLIST_ID_FRIENDLY_NAME = ""
 
 # BEGIN SET UP API/SPOTIFY CLIENT SpotifyOAuth
 # can also be spotipy.oauth2.SpotifyOAuth:
@@ -232,6 +254,7 @@ def get_artist_albums(artist):
 #         logger.info('Genres: %s', ','.join(artist['genres']))
 
 # Print information related to currenlty playing track. Also a gatekeeper function returning False if no playing track, and True and a playback info object from sp.current_user_playing_track().
+# TO DO: simplify other places that print this info if they do? By using this function?
 def print_information():
     # boolean that may be overriden depending:
     success = True
@@ -258,12 +281,7 @@ def print_information():
         print(e)
         print("Couldn't obtain track info from current context somehow, or other error?")
         success = False
-    global PLAYLIST_ID_1
-    if PLAYLIST_ID_1:
-        print("~\nPlaylist 1 ID:", PLAYLIST_ID_1)
-        print("  name: ", PLAYLIST_ID_FRIENDLY_NAME)
-    else:
-        print("~\nno PLAYLIST_ID_1 is set.")
+    print_playlist_1_info()
     if DISCARDS_PLAYLIST_ID:
         print("~\nDiscards playlist ID:", DISCARDS_PLAYLIST_ID)
     else:
@@ -345,12 +363,14 @@ def set_playlist_1():
             playlist_owner = sp.playlist(playlist_ID)['owner']['external_urls']['spotify']
             current_user = sp.me()['external_urls']['spotify']
             global PLAYLIST_ID_1
-            global PLAYLIST_ID_FRIENDLY_NAME
             if playlist_owner == current_user:
                 PLAYLIST_ID_1 = playlist_ID
-                print("~\n! SET playlist 1 to", PLAYLIST_ID_1)
-                PLAYLIST_ID_FRIENDLY_NAME = playlist_name
-                print("  name:", PLAYLIST_ID_FRIENDLY_NAME)
+                print("~\n! SET playlist 1.")
+                print_playlist_1_info()
+                # write that to the ini for fast setting again on script reload!
+                # function signature reference:
+                # def set_option(SECTION_NAME, OPTION_NAME, OPTION_VALUE, DESCRIPTIVE_COMMENT = None):
+                set_option('USER_VARIABLES', 'PLAYLIST_ID_1', PLAYLIST_ID_1, 'Optional playlist for track/library moves/deletes:')
             else:
                 print("~\nCurrent playlist not owned by current user. Can't assign to playlist 1.")
         except Exception as e:
@@ -359,6 +379,19 @@ def set_playlist_1():
     except Exception as e:
         print(e)
         print("~\nCouldn't obtain track info from current context somehow, or other error?")
+
+def print_playlist_1_info():
+    global PLAYLIST_ID_1
+    if PLAYLIST_ID_1:
+        print("~\nPlaylist 1 ID:", PLAYLIST_ID_1)
+        try:
+            playlist_name = sp.playlist(PLAYLIST_ID_1, fields="name")['name']
+            print("  name:", playlist_name)
+        except Exception as e:
+            print(e)
+            print("~\nCouldn't obtain track info from current context somehow, or other error?")
+    else:
+        print("~\nno PLAYLIST_ID_1 is set.")
 
 # Append the currently playing track to playlist 1, if playlist 1 is defined, and only if the track is not already on it.
 def add_current_track_to_playlist_1():
@@ -395,7 +428,7 @@ def add_current_track_to_playlist_1():
         # this function call adds to the end of a playlist by default, and we're doing that:
         sp.playlist_add_items(PLAYLIST_ID_1, list_of_track_IDs)
         print("ADDED track to playlist ID", PLAYLIST_ID_1)
-        print("  name: ", PLAYLIST_ID_FRIENDLY_NAME)
+        print_playlist_1_info()
         return True
     print("FLOW SHOULD NOT SHOW THIS. BLRO")
 
