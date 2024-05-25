@@ -23,8 +23,7 @@
 # - fetching recommended songs by genre? re https://stackoverflow.com/questions/61624487/extract-artist-genre-and-song-release-date-using-spotipy - although those genres can't be used directly? - but also https://tryapis.com/spotify/api/endpoint-get-recommendations
 # - things in the readmy
 
-import os
-import spotipy
+import os, spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
 THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
@@ -89,6 +88,9 @@ REDIRECT_URI = set_option_if_not('API_VARIABLES', 'REDIRECT_URI', 'URL to open o
 DISCARDS_PLAYLIST_ID = set_option_if_not('USER_VARIABLES', 'DISCARDS_PLAYLIST_ID', 'Playlist for tracks removed from playists and liked songs; effectively a recycle bin:', True)
 # REDIRECT_URI = set_option_if_not('API_VARIABLES', 'REDIRECT_URI', 'URL to open on setup of API authentication:')
 BACK_SEEK_MS = int(set_option_if_not('USER_VARIABLES', 'BACK_SEEK_MS', 'On skip back, skip this many ms e.g. 5000ms = 5 seconds:', True))
+# if that's positive, change it to negative (for intended use of plus a negative number in seeking back):
+if (BACK_SEEK_MS > 0):
+    BACK_SEEK_MS = (BACK_SEEK_MS * -1)
 FORWARD_SEEK_MS = int(set_option_if_not('USER_VARIABLES', 'FORWARD_SEEK_MS', 'On skip forward, skip this many ms e.g. 5000ms = 5 seconds:', True))
 # PLAYLIST_ID_1 will here be init as None from the function call if it's not found in the .ini; otherwise it will be set to what is found:
 PLAYLIST_ID_1 = set_option_if_not('USER_VARIABLES', 'PLAYLIST_ID_1', 'Optional playlist for track/library moves/deletes:', False)
@@ -129,8 +131,9 @@ reinstantiate_spotipy_client()
 
 # hotkeys setup:
 from global_hotkeys import *
+# NOTE: for debug print uncomment the following import:
+# import json
 import time
-import json
 
 # Declare functions that key bindings will use.
 # re: https://stackoverflow.com/a/1489838 - forget managing threads, just destroy all of them with the whole program execution. DO IT.
@@ -297,7 +300,6 @@ def make_discography_playlist():
     if to_continue:
         playlist_ID = info['context']['external_urls']['spotify']
         try:
-            import string
             import random
             artists = info['item']['artists']
             print("  Artist(s):")
