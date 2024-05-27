@@ -23,11 +23,10 @@
 # - fetching recommended songs by genre? re https://stackoverflow.com/questions/61624487/extract-artist-genre-and-song-release-date-using-spotipy - although those genres can't be used directly? - but also https://tryapis.com/spotify/api/endpoint-get-recommendations
 # - things in the readmy
 
-import os, spotipy
-from spotipy.oauth2 import SpotifyOAuth
-
 THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
 
+import os, spotipy
+from spotipy.oauth2 import SpotifyOAuth
 # !----------------------------------------------------------------------
 # BEGIN INI PARSER create / read variables from ini into global variables
 from extended_configparser.parser import ExtendedConfigParser
@@ -193,8 +192,18 @@ def change_repeat_mode():
     if current_repeat_mode_idx > 2:
         current_repeat_mode_idx = 0
     state_parameter = REPEAT_MODES[current_repeat_mode_idx]
-    # print('TAHT IS ', state_parameter)
     sp.repeat(state_parameter)
+
+SHUFFLE_STATES = [True, False]
+def toggle_playback_shuffle():
+    global SHUFFLE_STATES
+    retrieved_playback_state = sp.current_playback()['shuffle_state']
+    current_shuffle_state_idx = SHUFFLE_STATES.index(retrieved_playback_state)
+    current_shuffle_state_idx += 1
+    if current_shuffle_state_idx > 1:
+        current_shuffle_state_idx = 0
+    state_parameter = SHUFFLE_STATES[current_shuffle_state_idx]
+    sp.shuffle(state_parameter)
 
 # set playback position to start of current track
 def seek_to_track_start():
@@ -495,14 +504,16 @@ def keepalive_attempt_hack_conditional_wiggle_seek():
     else:
         print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player and restart this program.")
 
+def snorf():
+    print("snort")
 # TO USE??? recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs) re recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs)
 
 # Declare some key bindings.
 # for bindings object structure see the "Explanation of the binding structure" section in the same page; to copy the variant for square brackets:
 # ["hotkey", on_press_callback, on_release_callback, actuate_on_partial_release, press_callback_params,release_callback_params]
-
 # Bindings take on the form of:
 #   <binding>, on_press_callback, on_release_callback, actuate_on_partial_release_flag, callback_params
+# Also, a binding that is keys separated by commas is I think a chord? - a _sequence_ of keys or key combination. If for example it's "a, b", then pressing those two keys in sequence (typing one after the other) will trigger it.
 # It's useful to have 'actuate_on_partial_release_flag' set to False, 
 # so your modifier keys don't get in the way of any automatic keyboard output you're doing in response.
 # Note the actual hotkey syntax. Key combinations are denoted via the '+' character, 
@@ -520,16 +531,17 @@ bindings = [
     ["control + alt + page_up", None, previous_track, True, None, None],
     ["control + alt + page_down", None, next_track, True, None, None],
     ["control + alt + shift + p", None, change_repeat_mode, True, None, None],
+    ["control + alt + shift + s", None, toggle_playback_shuffle, False, None, None],
     ["control + alt + insert", None, seek_to_track_start, True, None, None],
     ["control + alt + left", None, relative_seek, True, None, BACK_SEEK_MS],
     ["control + alt + right", None, relative_seek, True, None, FORWARD_SEEK_MS],
     # advanced:
-    ["control + alt + shift + r + y", None, remove_current_track_from_current_playlist, False, None, None],
-    ["control + alt + shift + x + y", None, unsave_and_move_from_current_playlist_to_discards, False, None, None],
-    ["control + alt + shift + s", None, set_playlist_1, True, None, None],
+    ["control + alt + shift + r, y", None, remove_current_track_from_current_playlist, False, None, None],
+    ["control + alt + shift + x, y", None, unsave_and_move_from_current_playlist_to_discards, False, None, None],
+    ["control + alt + shift + p, 1", None, set_playlist_1, True, None, None],
     ["control + alt + shift + a", None, add_current_track_to_playlist_1, True, None, None],
     ["control + alt + shift + m", None, shuffle_current_track_to_playlist_1, False, None, None],
-    ["control + alt + shift + c + y", None, make_discography_playlist, True, None, None],
+    ["control + alt + shift + c, y", None, make_discography_playlist, True, None, None],
     ["control + alt + shift + i", None, print_information, True, None, None],
     ["control + alt + shift + q", None, exit_program, True, None, None]
 ]
