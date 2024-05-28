@@ -214,7 +214,8 @@ def seek_to_track_start():
 # set playback position forward or backward by seek_ms (milleseconds, negative or positive)
 def relative_seek(seek_ms):
     # nested function call here: set current playback progress to current + ms (with ms neg. or positive)
-    sp.seek_track(sp.current_playback()['progress_ms'] + seek_ms)
+    new_seek_ms_pos = int(sp.current_playback()['progress_ms']) + seek_ms
+    sp.seek_track(new_seek_ms_pos)
 
 # adapted from: https://github.com/spotipy-dev/spotipy/blob/master/examples/artist_discography.py
 # def get_artist(name):
