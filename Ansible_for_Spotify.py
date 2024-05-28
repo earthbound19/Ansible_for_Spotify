@@ -306,6 +306,7 @@ def print_information():
 
 # make discography playlist from the artist of the currently playing song.
 def make_discography_playlist():
+    print("Attempting to make discography playlist..")
     to_continue, info = print_information()
     if to_continue:
         playlist_ID = info['context']['external_urls']['spotify']
@@ -539,10 +540,10 @@ bindings = [
     # advanced:
     ["control + alt + shift + r, y", None, remove_current_track_from_current_playlist, False, None, None],
     ["control + alt + shift + x, y", None, unsave_and_move_from_current_playlist_to_discards, False, None, None],
-    ["control + alt + shift + p, 1", None, set_playlist_1, True, None, None],
+    ["control + alt + shift + p, 1", None, set_playlist_1, False, None, None],
     ["control + alt + shift + a", None, add_current_track_to_playlist_1, True, None, None],
     ["control + alt + shift + m", None, shuffle_current_track_to_playlist_1, False, None, None],
-    ["control + alt + shift + c, y", None, make_discography_playlist, True, None, None],
+    ["control + alt + shift + c, y", None, make_discography_playlist, False, None, None],
     ["control + alt + shift + i", None, print_information, True, None, None],
     ["control + alt + shift + q", None, exit_program, True, None, None]
 ]
