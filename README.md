@@ -38,21 +38,23 @@ See the see `bindings = [` comment/section in source code for details.
 
 Also, a hotkey to exit the program.
 
-# TO DO
-- hotkey for toggle shuffle/no shuffle/smart shuffle
-- dynamic hotkey assignment
-- UI to manage playlist definitions and display hotkeys
+# TO DO (up next if not already in progress)
 - platform-universal systray that displays solid heart if currently playing track in user library, empty heart if not (to help overcome one of Spotify's greatest UI annoyances: the removal of at-a-glance information of whether a song is in the "liked songs" list!) - but to overcome that further, try the old UI via [Spot-X](https://github.com/SpotX-Official/SpotX) 
-- multiple playlist definitions and associated playlist manipulation hotkeys?
 - figure out auth and client insantiation better such that it:
   - never crashes if possible
   - maintians or consistently renews authorization (and/or prompts for auth renewal, if possible), to FIX KNOWN ISSUE: the Spotify API seems to routinely reject API authentication, at least the way it's set up here, effectively terminating session/control. More likely to happen after hours of not using the API. Possible solutions [here](https://stackoverflow.com/questions/48883731/refresh-token-spotipy).
+- Dynamic (re)defining playlists from/to .ini (including code that dynamically reassigns their associated hotkeys live)
+- A dynamic HUD GUI for display / search / assignment of various playlists to various variables (playlist numbers, sort playlist, discard playlist)
+- multiple playlist definitions and associated playlist manipulation hotkeys?
 
-# WISH LIST
+# WISH LIST (backlog)
 Playlist building by advanced control / recommendation / parametric control, for example:
+- Find every instance of a song in your library (in every playlists, at the custom sort position it is in), and swap it with with another song. Use cases: updating one performance of a standard work (or "classic") for another, or swapping a single for an album track of the same song
+  - and optionally delete the replaced song from liked songs
 - Build playlists from recommended songs (by base genre/songs seeds), using multigraphs of desired track attributes and genres over time. For example, a rising sine wave of valence of songs, a linear rise of songs tempo, etc.
 - Use Spotify's own shuffle logic and user library information to build or extend another playlist: filter all tracks in a playlist which are also in the "Liked Songs" library (playlist) into a temporary list, set shuffle mode, and append everything from the queue to the end of another playlist.
    - Similar multigraphing of track attributes to build or extend a playlists that way
+- library import / export (re [exportify](https://exportify.net/), but with import also, for example to import arbitrary music (e.g. from prior/other library exports))
 
 ### See Also
 Things that inspired this:
