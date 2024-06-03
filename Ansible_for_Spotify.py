@@ -297,6 +297,12 @@ def print_information():
     print_playlist_1_info()
     if DISCARDS_PLAYLIST_ID:
         print("~\nDiscards playlist ID:", DISCARDS_PLAYLIST_ID)
+        try:
+            playlist_name = sp.playlist(DISCARDS_PLAYLIST_ID, fields="name")['name']
+            print("  name:", playlist_name)
+        except Exception as e:
+            print(e)
+            print("~\nCouldn't obtain playlist information from current context somehow, or other error?")
     else:
         print("~\nNo discards playlist id is set. Things may break if you try to use such a list.")
     if success == False:
@@ -402,7 +408,7 @@ def print_playlist_1_info():
             print("  name:", playlist_name)
         except Exception as e:
             print(e)
-            print("~\nCouldn't obtain track info from current context somehow, or other error?")
+            print("~\nCouldn't obtain playlist information from current context somehow, or other error?")
     else:
         print("~\nno PLAYLIST_ID_1 is set.")
 
