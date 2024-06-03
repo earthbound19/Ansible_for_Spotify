@@ -332,12 +332,14 @@ def make_discography_playlist():
                 # get all albums of artist!
                 albums = get_artist_albums(artist)
                 # get all tracks of albums!
+                print("Collecting and filtering tracks by credit to artist", discography_artist_name, ". .")
                 for album in albums:
                     tracks = get_album_tracks(album)
                     # check tracks for credit to the artist we're building a playlist for, and only add to an array of tracks if it matches (as artists can end up on albums with other artists where they didn't contribute to other tracks) :
                     for track in tracks:
                         track_artists = track['artists']
                         for track_artist in track_artists:
+                            print(". ", end="")
                             if track_artist['name'] == discography_artist_name:
                                 all_artists_tracks.append(track['external_urls']['spotify'])
                             # TO DO? - make a separate playlist with these? Or a config item to optionally include them?
