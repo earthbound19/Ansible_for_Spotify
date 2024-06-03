@@ -321,25 +321,36 @@ def make_discography_playlist():
             artists = info['item']['artists']
             print("  Artist(s):")
             for artist in artists:
-                artist_name = artist['name']; artist_id = artist['id']; artist_URL = artist['external_urls']['spotify']
-                print(" ", artist_name, artist_id, artist_URL)
+                # optional dev empty of debug.txt:
+                f = open("debug.txt", "w")
+                f.write("")
+                f.close()
+                discography_artist_name = artist['name']; artist_id = artist['id']; artist_URL = artist['external_urls']['spotify']
+                print(" ", discography_artist_name, artist_id, artist_URL)
                 all_artists_tracks = []
+                # all_related_artists_tracks = []
                 # get all albums of artist!
                 albums = get_artist_albums(artist)
                 # get all tracks of albums!
                 for album in albums:
                     tracks = get_album_tracks(album)
+                    # check tracks for credit to the artist we're building a playlist for, and only add to an array of tracks if it matches (as artists can end up on albums with other artists where they didn't contribute to other tracks) :
                     for track in tracks:
-                        all_artists_tracks.append(track['external_urls']['spotify'])
-                        # print(track)
-                        # f = open("debug.txt", "w")
+                        track_artists = track['artists']
+                        for track_artist in track_artists:
+                            if track_artist['name'] == discography_artist_name:
+                                all_artists_tracks.append(track['external_urls']['spotify'])
+                            # TO DO? - make a separate playlist with these? Or a config item to optionally include them?
+                            # else:
+                                # all_related_artists_tracks.append(track['external_urls']['spotify'])
+                        # f = open("debug.txt", "a")
+                        # f.write("\n------------------------------------\n")
                         # f.write(json.dumps(track, indent=4))
                         # f.close()
                         # print("Wrote info from write_currently_playing_track_info() call to debug.txt.")
-                        # print(track['artists'])
                 print("Done collectiong all tracks for artist. Building discography playlist . . .")
                 random_playlist_name_suffix = ''.join((random.choice(' ▔▀▆▄▂▌▐█▊▎░▒▓▖▗▘▙▚▛▜▝▞▟') for i in range(4)))
-                new_playlist_name = artist_name + " ~" + random_playlist_name_suffix
+                new_playlist_name = discography_artist_name + " ~" + random_playlist_name_suffix
                 print("MAKING PLAYLIST: ", new_playlist_name)
                 user_id = sp.me()['id']
                 global THIS_SCRIPT_FRIENDLY_NAME

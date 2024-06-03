@@ -48,6 +48,7 @@ Also, a hotkey to exit the program.
 - multiple playlist definitions and associated playlist manipulation hotkeys?
 
 # WISH LIST (backlog)
+- Option to split music found by other artists into other discography playlists when building discography playlist(s)?
 - A local synced database to do some of the following (and potentially other things) much faster
 Playlist building by advanced control / recommendation / parametric control, for example:
 - Find every instance of a song in your library (in every playlists, at the custom sort position it is in), and swap it with with another song. Use cases: updating one performance of a standard work (or "classic") for another, or swapping a single for an album track of the same song
