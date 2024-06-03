@@ -463,7 +463,7 @@ def remove_current_track_from_current_playlist():
         print("Current playlist ID:", playlist_ID)
         print("track ID:", track_ID)
         sp.playlist_remove_all_occurrences_of_items(playlist_ID, list_of_track_IDs)
-        # sp.next_track()
+        sp.next_track()
     except Exception as e:
         print(e)
         print("~\nRemove current track from current playlist: cannot; no playlist context.")
@@ -544,12 +544,12 @@ bindings = [
     ["control + alt + left", None, relative_seek, True, None, BACK_SEEK_MS],
     ["control + alt + right", None, relative_seek, True, None, FORWARD_SEEK_MS],
     # advanced:
-    ["control + alt + shift + r, y", None, remove_current_track_from_current_playlist, False, None, None],
-    ["control + alt + shift + x, y", None, unsave_and_move_from_current_playlist_to_discards, False, None, None],
-    ["control + alt + shift + p, 1", None, set_playlist_1, False, None, None],
+    ["control + alt + shift + r", None, remove_current_track_from_current_playlist, False, None, None],
+    ["control + alt + shift + x", None, unsave_and_move_from_current_playlist_to_discards, False, None, None],
+    ["control + alt + shift + 1", None, set_playlist_1, False, None, None],
     ["control + alt + shift + a", None, add_current_track_to_playlist_1, True, None, None],
     ["control + alt + shift + m", None, shuffle_current_track_to_playlist_1, False, None, None],
-    ["control + alt + shift + c, y", None, make_discography_playlist, False, None, None],
+    ["control + alt + shift + c", None, make_discography_playlist, False, None, None],
     ["control + alt + shift + i", None, print_information, True, None, None],
     ["control + alt + shift + q", None, exit_program, True, None, None]
 ]
