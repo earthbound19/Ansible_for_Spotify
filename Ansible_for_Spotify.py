@@ -267,6 +267,25 @@ def get_artist_albums(artist):
 #         logger.info('Genres: %s', ','.join(artist['genres']))
 
 # Print information related to currenlty playing track. Also a gatekeeper function returning False if no playing track, and True and a playback info object from sp.current_user_playing_track().
+# print track info; must be passed an info object obtained via: info = sp.current_user_playing_track()
+def print_current_track_information(info):
+    try:
+        track_ID = info['item']['external_urls']['spotify']
+        artists = info['item']['artists']
+        print("Current track ID:", track_ID)
+        print("Artist(s):")
+        for artist in artists:
+            print("\t", artist['name'])                
+        album = info['item']['album']['name']
+        track_name = info['item']['name']
+        print("Album:\t", album)
+        print("Track:\t", track_name)
+        return True
+    except Exception as e:
+        print(e)
+        print("No current track context or not found?")
+        return False
+
 # TO DO: simplify other places that print this info if they do? By using this function?
 def print_information():
     # boolean that may be overriden depending:
@@ -283,13 +302,7 @@ def print_information():
         except Exception as e:
             print(e)
             print("No currently playing playlist context? An album or podcast?")
-        try:
-            track_ID = info['item']['external_urls']['spotify']
-            print("Current track ID:", track_ID)
-        except Exception as e:
-            print(e)
-            print("No current track context or not found?")
-            success = False
+        success = print_current_track_information(info)
     except Exception as e:
         print(e)
         print("Couldn't obtain track info from current context somehow, or other error?")
@@ -436,7 +449,7 @@ def add_current_track_to_playlist_1():
         info = sp.current_user_playing_track()
         track_id_to_add = info['item']['external_urls']['spotify']
         list_of_track_IDs = [track_id_to_add]
-        print("~\nCurrent track ID:", track_id_to_add)
+        print_current_track_information()
         # get info of target playlist to parse:
         # prior, deprecated track retrieve method; seems I couldn't paginate with it though:
         # items = sp.playlist(PLAYLIST_ID_1)['tracks']['items']
@@ -497,11 +510,11 @@ def unsave_and_move_from_current_playlist_to_discards():
     info = sp.current_user_playing_track()
     try:
         playlist_ID = info['context']['external_urls']['spotify']
-        track_ID = info['item']['external_urls']['spotify']
-        list_of_track_IDs = [track_ID]
         print("~\nDiscards playlist ID:", DISCARDS_PLAYLIST_ID)
         print("Current playlist ID:", playlist_ID)
-        print("track ID:", track_ID)
+        print_current_track_information(info)
+        track_ID = info['item']['external_urls']['spotify']
+        list_of_track_IDs = [track_ID]
         sp.playlist_add_items(DISCARDS_PLAYLIST_ID, list_of_track_IDs)
         sp.current_user_saved_tracks_delete(list_of_track_IDs)
         sp.playlist_remove_all_occurrences_of_items(playlist_ID, list_of_track_IDs)
