@@ -559,25 +559,25 @@ def snorf():
 # NOTE: although the documentation for that function says the release callback parameter should be a dict, I could not get that to work and it accepted just a value for it. ?
 bindings = [
     # basic:
-    ["control + alt + home", None, pause_or_start_playback, True, None, None],
-    ["control + alt + numpad_5", None, save_track, True, None, None],
-    ["control + alt + numpad_0", None, unsave_track, True, None, None],
-    ["control + alt + page_up", None, previous_track, True, None, None],
-    ["control + alt + page_down", None, next_track, True, None, None],
-    ["control + alt + shift + p", None, change_repeat_mode, True, None, None],
-    ["control + alt + shift + s", None, toggle_playback_shuffle, False, None, None],
-    ["control + alt + insert", None, seek_to_track_start, True, None, None],
-    ["control + alt + left", None, relative_seek, True, None, BACK_SEEK_MS],
-    ["control + alt + right", None, relative_seek, True, None, FORWARD_SEEK_MS],
+    ["control + alt + left_window + home", None, pause_or_start_playback, True, None, None],
+    ["control + alt + left_window + numpad_5", None, save_track, True, None, None],
+    ["control + alt + left_window + numpad_0", None, unsave_track, True, None, None],
+    ["control + alt + left_window + page_up", None, previous_track, True, None, None],
+    ["control + alt + left_window + page_down", None, next_track, True, None, None],
+    ["control + alt + left_window + p", None, change_repeat_mode, True, None, None],
+    ["control + alt + left_window + s", None, toggle_playback_shuffle, False, None, None],
+    ["control + alt + left_window + insert", None, seek_to_track_start, True, None, None],
+    ["control + alt + left_window + left", None, relative_seek, True, None, BACK_SEEK_MS],
+    ["control + alt + left_window + right", None, relative_seek, True, None, FORWARD_SEEK_MS],
     # advanced:
-    ["control + alt + shift + r", None, remove_current_track_from_current_playlist, False, None, None],
-    ["control + alt + shift + x", None, unsave_and_move_from_current_playlist_to_discards, False, None, None],
-    ["control + alt + shift + 1", None, set_playlist_1, False, None, None],
-    ["control + alt + shift + a", None, add_current_track_to_playlist_1, True, None, None],
-    ["control + alt + shift + m", None, shuffle_current_track_to_playlist_1, False, None, None],
-    ["control + alt + shift + c", None, make_discography_playlist, False, None, None],
-    ["control + alt + shift + i", None, print_information, True, None, None],
-    ["control + alt + shift + q", None, exit_program, True, None, None]
+    ["control + alt + left_window + r", None, remove_current_track_from_current_playlist, False, None, None],
+    ["control + alt + left_window + x", None, unsave_and_move_from_current_playlist_to_discards, False, None, None],
+    ["control + alt + left_window + 1", None, set_playlist_1, False, None, None],
+    ["control + alt + left_window + a", None, add_current_track_to_playlist_1, True, None, None],
+    ["control + alt + left_window + m", None, shuffle_current_track_to_playlist_1, False, None, None],
+    ["control + alt + left_window + c", None, make_discography_playlist, False, None, None],
+    ["control + alt + left_window + i", None, print_information, True, None, None],
+    ["control + alt + left_window + q", None, exit_program, True, None, None]
 ]
 
 # Register all of our keybindings
