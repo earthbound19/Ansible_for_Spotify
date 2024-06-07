@@ -489,7 +489,8 @@ def remove_current_track_from_current_playlist():
         print("Current playlist ID:", playlist_ID)
         print("track ID:", track_ID)
         sp.playlist_remove_all_occurrences_of_items(playlist_ID, list_of_track_IDs)
-        sp.next_track()
+        # I've gone back and forth on wanting the following; now I don't :p
+        # sp.next_track()
     except Exception as e:
         print(e)
         print("~\nRemove current track from current playlist: cannot; no playlist context.")
