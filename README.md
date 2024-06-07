@@ -40,6 +40,7 @@ Also, a hotkey to exit the program.
 
 # TO DO (up next if not already in progress)
 - platform-universal systray that displays solid heart if currently playing track in user library, empty heart if not (to help overcome one of Spotify's greatest UI annoyances: the removal of at-a-glance information of whether a song is in the "liked songs" list!) - but to overcome that further, try the old UI via [Spot-X](https://github.com/SpotX-Official/SpotX) 
+- bookmarks save / load. by hotkey chord? e.g. [key combo to tell script we're saving a bookmark], [key to say which number of bookmark (1-9?)]
 - figure out auth and client insantiation better such that it:
   - never crashes if possible
   - maintians or consistently renews authorization (and/or prompts for auth renewal, if possible), to FIX KNOWN ISSUE: the Spotify API seems to routinely reject API authentication, at least the way it's set up here, effectively terminating session/control. More likely to happen after hours of not using the API. Possible solutions [here](https://stackoverflow.com/questions/48883731/refresh-token-spotipy).
