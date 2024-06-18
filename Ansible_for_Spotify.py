@@ -451,7 +451,7 @@ def add_current_track_to_playlist_1():
         info = sp.current_user_playing_track()
         track_id_to_add = info['item']['external_urls']['spotify']
         list_of_track_IDs = [track_id_to_add]
-        print_current_track_information()
+        print_current_track_information(info)
         # get info of target playlist to parse:
         # prior, deprecated track retrieve method; seems I couldn't paginate with it though:
         # items = sp.playlist(PLAYLIST_ID_1)['tracks']['items']
