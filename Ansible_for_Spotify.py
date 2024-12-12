@@ -101,32 +101,13 @@ API_SCOPE = "user-read-playback-state user-modify-playback-state user-read-curre
 
 # BEGIN SET UP API/SPOTIFY CLIENT SpotifyOAuth
 # can also be spotipy.oauth2.SpotifyOAuth:
-AUTH_MANAGER = spotipy.oauth2.SpotifyPKCE(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, scope=API_SCOPE)
-
-USER_TOKEN = None
-# Why refresh token? Because my player / API connection seems to timeout, and looking and spotipy functions documentation I found this function that led to googling that led to the suggestiong that calling the following function periodically might solve it; re: https://stackoverflow.com/a/73057807
-def refresh_token():
-    try:
-        global USER_TOKEN
-        USER_TOKEN = spotipy.util.prompt_for_user_token(USERNAME, API_SCOPE, client_id = CLIENT_ID, client_secret = CLIENT_SECRET, redirect_uri = REDIRECT_URI)
-    except Exception as e:
-        print(e)
-        print("ERROR attempting to refresh Spotify user auth token.")
-
-refresh_token()
+	# DEPRECATED on recommendation of AI code review:
+	# AUTH_MANAGER = spotipy.oauth2.SpotifyPKCE(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, scope=API_SCOPE)
+# TRYING INSTEAD on recommendation of AI code review:
+AUTH_MANAGER = SpotifyOAuth(client_id=CLIENT_ID, client_secret=CLIENT_SECRET, redirect_uri=REDIRECT_URI, scope=API_SCOPE)
 
 # Instantiate API client.
-sp = None
-def reinstantiate_spotipy_client():
-    global sp
-    try:
-        sp = spotipy.Spotify(auth_manager=AUTH_MANAGER, requests_session=True, status_retries=1, requests_timeout=2, auth=USER_TOKEN)
-    except Exception as e:
-        print(e)
-        print("ERROR attempting to reinstantiate spotipy (Spotify API wrapper) client.")
-
-reinstantiate_spotipy_client()
-# END SET UP API/SPOTIFY CLIENT
+sp = spotipy.Spotify(auth_manager=AUTH_MANAGER)
 
 # hotkeys setup:
 from global_hotkeys import *
@@ -217,6 +198,9 @@ def seek_to_track_start():
 def relative_seek(seek_ms):
     # nested function call here: set current playback progress to current + ms (with ms neg. or positive)
     new_seek_ms_pos = int(sp.current_playback()['progress_ms']) + seek_ms
+    # set that to zero if it's negative, to avoid error:
+    if new_seek_ms_pos < 0:
+        new_seek_ms_pos = 0
     sp.seek_track(new_seek_ms_pos)
 
 # adapted from: https://github.com/spotipy-dev/spotipy/blob/master/examples/artist_discography.py
@@ -527,7 +511,7 @@ def unsave_and_move_from_current_playlist_to_discards():
         print(e)
         print("~\nUnsave and shuffle current track to discard playlist: no playlist context; cannot remove currently playing track from any playlist.")
 
-# function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to be when the connection dies.
+# function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to cause at least the API client to forget the player.
 def keepalive_attempt_hack_conditional_wiggle_seek():
     info = sp.current_playback()
     if info is not None:
@@ -537,12 +521,10 @@ def keepalive_attempt_hack_conditional_wiggle_seek():
             sp.seek_track(current_track_playback_time_ms + 64)
             time.sleep(0.02)
             sp.seek_track(current_track_playback_time_ms)
-            print("~\nRan keepalive_attempt_hack_conditional_wiggle_seek.")
+            # print("~\nRan keepalive_attempt_hack_conditional_wiggle_seek.")
     else:
-        print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player and restart this program.")
+        print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player.")
 
-def snorf():
-    print("snort")
 # TO USE??? recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs) re recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs)
 
 # Declare some key bindings.
@@ -591,17 +573,11 @@ start_checking_hotkeys()
 
 # START: THINGS BETWEEN THIS AND THE END THIS COMMENT WILL RUN INDEFINITELY
 # re: https://stackoverflow.com/a/2223182
-# THIS IS AN ATTEMPT TO KEEP THE PLAYER/API CONNECTION FROM DYING, which it did a lot in testing use and development if I left it running but the player paused.
-timer_interval = 84
+# THIS IS AN ATTEMPT TO MAINTAIN API CLIENT AWARENESS OF THE MUSIC PLAYER.
+timer_interval = 55
 
 import threading
-reinstantiate_client_counter = 0
 def f(f_stop):
-    refresh_token()
-    reinstantiate_spotipy_client()
-    global reinstantiate_client_counter
-    reinstantiate_client_counter += 1
-    print("Keepalive (refresh token and (re)instantiate client) attempt:", reinstantiate_client_counter)
     keepalive_attempt_hack_conditional_wiggle_seek()
     if not f_stop.is_set():
         # call f() again in timer_interval seconds
