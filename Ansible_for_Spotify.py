@@ -120,18 +120,51 @@ import time
 def exit_program():
     os._exit(3)
 
-# Function: pause or start playback:
-def pause_or_start_playback():
-    # get player playback state and init global boolean ofwhether paused or playing.
-    # TO DO: function outside this that wraps sp.current_playback(), to handle if null or other return from the following because the API isn't connecting this script with any active player:
+# Function to find an active device. Returns the first active device's ID or None if no devices are found.
+def find_active_device():
     try:
-        if sp.current_playback()['is_playing']:
+        devices = sp.devices()  # Retrieve all available devices
+        # print("Devices List:", devices)
+        for device in devices.get('devices', []):
+            if device.get('is_active') or device.get('id'):
+                # print("Active Device Found:", device['name'], device['id'])
+                return device['id']  # Return the first active device's ID
+        print("No active devices found.")
+        return None
+    except Exception as e:
+        print("Error finding active device:", e)
+        return None
+
+# Function to switch playback to a specified device using its ID
+def switch_to_device(device_id):
+    try:
+        sp.transfer_playback(device_id=device_id, force_play=True)
+        print(f"Playback transferred to device: {device_id}")
+    except Exception as e:
+        print("Error transferring playback:", e)
+
+# Function: pause or start playback, using other functions to find and switch to an active player if no player found:
+def pause_or_start_playback():
+    # get player playback state and init global boolean of whether paused or playing.
+    # TO DO: function outside this that wraps sp.current_playback(), to handle if null or other return from the following because the API isn't connecting this script with any active player?
+    try:
+        playback = sp.current_playback()
+        if not playback:  # If there's no playback context, find and switch to an active device
+            print("No active player found. Searching for active devices...")
+            active_device_id = find_active_device()
+            if active_device_id:
+                switch_to_device(active_device_id)
+            else:
+                print("No active device available. Cannot resume playback.")
+                return
+
+        if playback and playback['is_playing']:
             sp.pause_playback()
         else:
             sp.start_playback()
     except Exception as e:
         print(e)
-        print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player and restart this program:")
+        print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player manually, then retry control from this script.")
     
 def previous_track():
     ret = sp.previous_track()
@@ -511,19 +544,31 @@ def unsave_and_move_from_current_playlist_to_discards():
         print(e)
         print("~\nUnsave and shuffle current track to discard playlist: no playlist context; cannot remove currently playing track from any playlist.")
 
-# function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to cause at least the API client to forget the player.
+# function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to cause at least the API client to forget the player. 
 def keepalive_attempt_hack_conditional_wiggle_seek():
-    info = sp.current_playback()
-    if info is not None:
+    try:
+        info = sp.current_playback()
+        # possible workaround to keep player connection active; commented out for now:
+        if info is None:  # Handle case when no active playback is detected
+            print("No active playback. Searching for active player...")
+            active_device_id = find_active_device()
+            if active_device_id:
+                switch_to_device(active_device_id)
+                print("Switched to active device.")
+            else:
+                print("No devices available. Keepalive failed.")
+                return
+        # Continue only if playback info exists
         if not info['is_playing']:
-            current_track_playback_time_ms = sp.current_user_playing_track()['progress_ms']
-            current_track_playback_time_ms
-            sp.seek_track(current_track_playback_time_ms + 64)
+            current_position  = info['progress_ms'] or 0  # Default to 0 if progress_ms
+            # deprecated current ms time acquire method:
+            # current_position  = sp.current_user_playing_track()['progress_ms']
+            sp.seek_track(current_position  + 64)
             time.sleep(0.02)
-            sp.seek_track(current_track_playback_time_ms)
+            sp.seek_track(current_position)
             # print("~\nRan keepalive_attempt_hack_conditional_wiggle_seek.")
-    else:
-        print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player.")
+    except Exception as e:
+        print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player manually, then retry control from this script. OR There was some other error in run of playback position wiggle / keepalive.")
 
 # TO USE??? recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs) re recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs)
 
@@ -588,6 +633,6 @@ f(f_stop)
 # END: THINGS BETWEEN THIS AND THE END THIS COMMENT WILL RUN INDEFINITELY
 
 # everything after this will only run once
-# Monitor global keybindings eternally by doing an eternal while loop:
+# Monitor global keybindings with an eternal while loop:
 while True:
     time.sleep(0.1)
