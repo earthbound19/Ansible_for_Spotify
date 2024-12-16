@@ -570,6 +570,59 @@ def keepalive_attempt_hack_conditional_wiggle_seek():
     except Exception as e:
         print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player manually, then retry control from this script. OR There was some other error in run of playback position wiggle / keepalive.")
 
+# Function: Save the current playback (playlist, track, position) as a bookmark
+def save_bookmark():
+    try:
+        # Get current playback details
+        playback = sp.current_playback()
+        if not playback:
+            print("No playback context found. Cannot save bookmark.")
+            return
+
+        # Retrieve playlist, track, and playback position
+        playlist_id = playback['context']['uri'] if playback.get('context') else None
+        track_id = playback['item']['id'] if playback.get('item') else None
+        position_ms = playback['progress_ms']
+
+        if not track_id:
+            print("No track currently playing. Cannot save bookmark.")
+            return
+
+        # Save to .ini file
+        set_option('BOOKMARK', 'playlist_id', playlist_id or 'None', "Playlist ID of the current bookmark")
+        set_option('BOOKMARK', 'track_id', track_id, "Track ID of the current bookmark")
+        set_option('BOOKMARK', 'position_ms', str(position_ms), "Playback position in milliseconds")
+
+        print(f"Bookmark saved: Playlist={playlist_id}, Track={track_id}, Position={position_ms}ms")
+    except Exception as e:
+        print(f"Error saving bookmark: {e}")
+
+# Function: Load and resume playback from the saved bookmark
+def load_bookmark():
+    try:
+        # Read saved bookmark details
+        playlist_id = config.get('BOOKMARK', 'playlist_id', fallback=None)
+        track_id = config.get('BOOKMARK', 'track_id', fallback=None)
+        position_ms = int(config.get('BOOKMARK', 'position_ms', fallback=0))
+
+        if not track_id:
+            print("No bookmark found. Save a bookmark first.")
+            return
+
+        print(f"Loading bookmark: Playlist={playlist_id}, Track={track_id}, Position={position_ms}ms")
+
+        # Start playback
+        if playlist_id and playlist_id != 'None':
+            sp.start_playback(context_uri=playlist_id, offset={'uri': f"spotify:track:{track_id}"})
+        else:
+            sp.start_playback(uris=[f"spotify:track:{track_id}"])
+
+        # Seek to the saved position
+        sp.seek_track(position_ms)
+        print("Playback resumed from bookmark.")
+    except Exception as e:
+        print(f"Error loading bookmark: {e}")
+
 # TO USE??? recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs) re recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs)
 
 # Declare some key bindings.
@@ -607,7 +660,9 @@ bindings = [
     ["control + alt + shift + m", None, shuffle_current_track_to_playlist_1, False, None, None],
     ["control + alt + shift + c", None, make_discography_playlist, False, None, None],
     ["control + alt + shift + i", None, print_information, True, None, None],
-    ["control + alt + shift + q", None, exit_program, True, None, None]
+    ["control + alt + shift + q", None, exit_program, True, None, None],
+    ["control + alt + shift + b, s", None, save_bookmark, True, None, None],
+    ["control + alt + shift + b, l", None, load_bookmark, True, None, None]
 ]
 
 # Register all of our keybindings
