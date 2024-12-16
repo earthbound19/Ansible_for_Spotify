@@ -56,7 +56,7 @@ def set_option_if_not(SECTION_NAME, OPTION_NAME, DESCRIPTIVE_COMMENT = None, REQ
         config.set(SECTION_NAME, OPTION_NAME, option_value, comment = DESCRIPTIVE_COMMENT)
         with open('Ansible_for_Spotify.ini', 'w') as configfile:
             config.write(configfile)
-            print("Wrote section ", SECTION_NAME, "option/value ", OPTION_NAME, option_value, "To .ini and variable.")
+            # print("Wrote section ", SECTION_NAME, "option/value ", OPTION_NAME, option_value, "To .ini and variable.")
         return option_value
     else:
         try:
@@ -72,7 +72,7 @@ def set_option(SECTION_NAME, OPTION_NAME, OPTION_VALUE, DESCRIPTIVE_COMMENT = No
     config.set(SECTION_NAME, OPTION_NAME, OPTION_VALUE, comment = DESCRIPTIVE_COMMENT)
     with open('Ansible_for_Spotify.ini', 'w') as configfile:
         config.write(configfile)
-        print("Wrote section ", SECTION_NAME, "option/value ", OPTION_NAME, OPTION_VALUE, "To .ini and variable.")
+        # print("Wrote section ", SECTION_NAME, "option/value ", OPTION_NAME, OPTION_VALUE, "To .ini and variable.")
 
 
 # SETTING GLOBALS HERE:
@@ -95,6 +95,26 @@ FORWARD_SEEK_MS = int(set_option_if_not('USER_VARIABLES', 'FORWARD_SEEK_MS', 'On
 PLAYLIST_ID_1 = set_option_if_not('USER_VARIABLES', 'PLAYLIST_ID_1', 'Optional playlist for track/library moves/deletes:', False)
 # END INI PARSER create / read variables from ini into global variables
 # !--------------------------------------------------------------------
+
+# SET DEFAULT / BLANK INI BOOKMARKS IF THERE ARE NONE
+def initialize_bookmarks_in_ini():
+    # Create bookmark sections if they don't exist
+    for i in range(0, 10):  # Let's assume you want to create 10 bookmarks
+        bookmark_name = f"BOOKMARK {i}"
+        if not config.has_section(bookmark_name):
+            config.add_section(bookmark_name)
+            set_option(bookmark_name, 'playlist_id', 'None')
+            set_option(bookmark_name, 'playlist_name', 'Unknown Playlist')
+            set_option(bookmark_name, 'track_id', 'None')
+            set_option(bookmark_name, 'position_ms', '0')
+            set_option(bookmark_name, 'key', str(i).lower())  # Key is 1, 2, 3, etc.
+
+    # Save the INI file with these default bookmark sections
+    with open('Ansible_for_Spotify.ini', 'w') as configfile:
+        config.write(configfile)
+        print("Initialized default blank bookmark sections in INI.")
+
+initialize_bookmarks_in_ini()
 
 API_SCOPE = "user-read-playback-state user-modify-playback-state user-read-currently-playing app-remote-control app-remote-control streaming playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-read-playback-position user-library-modify user-library-read"
 
@@ -570,16 +590,21 @@ def keepalive_attempt_hack_conditional_wiggle_seek():
     except Exception as e:
         print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player manually, then retry control from this script. OR There was some other error in run of playback position wiggle / keepalive.")
 
-# Function: Save the current playback (playlist, track, position) as a bookmark
-def save_bookmark():
+# START BOOKMARK FUNCTIONS REGION
+# NOTE THAT LOAD AND SAVE BOOKMARK HOTKEYS are hard-coded in one of these functions (see below).
+# A BOOKMARK IS A PLAYLIST, TRACK IN THE PLAYLIST, PLAYBACK POSITION IN THE TRACK, AND PLAYLIST NAME.
+# Function: Save the current playback as a bookmark with a specific key
+# TO DO:
+# - fix difficulty triggering bookmark hotkeys, if possible? I have to press the second hotkey in the sequence so fast. A way to tell the hotkey library to wait longer to register a second key combo in a sequence?
+# - fix that nothing can call the following function  unless a bookmark is defined - cannot dynamally make a NEW bookmark definition; WORKAROUND: have initialize_bookmarks_in_ini() pre-save 10 of them which can be overwritten, as they pre-exist:
+# - make it clearer in INI and / or somewhere in code how the chained (sequence) bookmark hotkeys work
+def save_bookmark(bookmark_key):
     try:
-        # Get current playback details
         playback = sp.current_playback()
         if not playback:
             print("No playback context found. Cannot save bookmark.")
             return
 
-        # Retrieve playlist, track, and playback position
         playlist_id = playback['context']['uri'] if playback.get('context') else None
         track_id = playback['item']['id'] if playback.get('item') else None
         position_ms = playback['progress_ms']
@@ -588,40 +613,110 @@ def save_bookmark():
             print("No track currently playing. Cannot save bookmark.")
             return
 
-        # Save to .ini file
-        set_option('BOOKMARK', 'playlist_id', playlist_id or 'None', "Playlist ID of the current bookmark")
-        set_option('BOOKMARK', 'track_id', track_id, "Track ID of the current bookmark")
-        set_option('BOOKMARK', 'position_ms', str(position_ms), "Playback position in milliseconds")
+        bookmark_name = f"BOOKMARK {bookmark_key}"
+        playlist_name = "None"
+        if playlist_id and "playlist" in playlist_id:
+            try:
+                playlist_info = sp.playlist(playlist_id.split(":")[-1], fields="name")
+                playlist_name = playlist_info.get('name', 'Unknown Playlist')
+            except:
+                pass
 
-        print(f"Bookmark saved: Playlist={playlist_id}, Track={track_id}, Position={position_ms}ms")
+        # Ensure the bookmark section exists and overwrite the values
+        if not config.has_section(bookmark_name):
+            config.add_section(bookmark_name)
+
+        # Overwrite the existing bookmark
+        set_option(bookmark_name, 'playlist_id', playlist_id or 'None')
+        set_option(bookmark_name, 'playlist_name', playlist_name)
+        set_option(bookmark_name, 'track_id', track_id)
+        set_option(bookmark_name, 'position_ms', str(position_ms))
+        set_option(bookmark_name, 'key', bookmark_key)
+
+        # Re-read the configuration file to ensure changes are applied?
+        # config.read('Ansible_for_Spotify.ini')
+        
+        print('Bookmark saved (hopefully) for ', bookmark_key, '.')
+
+        # Re-register hotkeys based on the updated INI
+        register_bookmark_hotkeys_from_ini()
+
+        print(f"Bookmark '{bookmark_name}' saved and hotkeys updated.")
     except Exception as e:
-        print(f"Error saving bookmark: {e}")
+        print(f"\tPossible error saving bookmark: {e}")
 
-# Function: Load and resume playback from the saved bookmark
-def load_bookmark():
+
+# Function: Load a bookmark by its second-level key
+def load_bookmark(bookmark_key):
     try:
-        # Read saved bookmark details
-        playlist_id = config.get('BOOKMARK', 'playlist_id', fallback=None)
-        track_id = config.get('BOOKMARK', 'track_id', fallback=None)
-        position_ms = int(config.get('BOOKMARK', 'position_ms', fallback=0))
-
-        if not track_id:
-            print("No bookmark found. Save a bookmark first.")
+        bookmark_name = f"BOOKMARK {bookmark_key}"
+        if not config.has_section(bookmark_name):
+            print(f"No bookmark found for key '{bookmark_key}'.")
             return
 
-        print(f"Loading bookmark: Playlist={playlist_id}, Track={track_id}, Position={position_ms}ms")
+        playlist_id = config.get(bookmark_name, 'playlist_id', fallback=None)
+        playlist_name = config.get(bookmark_name, 'playlist_name', fallback='Unknown Playlist')
+        track_id = config.get(bookmark_name, 'track_id', fallback=None)
+        position_ms = int(config.get(bookmark_name, 'position_ms', fallback=0))
 
-        # Start playback
         if playlist_id and playlist_id != 'None':
             sp.start_playback(context_uri=playlist_id, offset={'uri': f"spotify:track:{track_id}"})
         else:
             sp.start_playback(uris=[f"spotify:track:{track_id}"])
 
-        # Seek to the saved position
         sp.seek_track(position_ms)
-        print("Playback resumed from bookmark.")
+        print(f"Loaded bookmark '{playlist_id}'")
+        print(f"Playlist Name '{playlist_name}'.")
     except Exception as e:
-        print(f"Error loading bookmark: {e}")
+        print(f"\tPossible error loading bookmark: {e}")
+
+# LOAD AND SAVE BOOKMARK HOTKEYS HARDCODED HERE:
+# Function: Dynamically generate and register bookmark hotkeys from the .ini file
+from functools import partial
+
+def register_bookmark_hotkeys_from_ini():
+    dynamic_bindings = []
+    for section in config.sections():
+        if section.startswith("BOOKMARK "):
+            bookmark_key = config.get(section, 'key', fallback=None)
+            if bookmark_key:
+                save_sequence = f"control + alt + shift + b, {bookmark_key}"
+                load_sequence = f"control + alt + shift + l, {bookmark_key}"
+# binding structure: ["hotkey", on_press_callback, on_release_callback, actuate_on_partial_release, press_callback_params, release_callback_params]
+# apparently failed binding dict definition? :
+# dynamic_bindings.append({
+#     "hotkey": save_sequence,
+#     "on_press_callback": None,
+#     "on_release_callback": save_bookmark,
+#     "actuate_on_partial_release": True,
+#     "callback_params": None,
+#     "release_callback_params": bookmark_key
+# })
+                dynamic_bindings.append([
+                    save_sequence, None, save_bookmark, True, None, bookmark_key
+                ])
+                dynamic_bindings.append([
+                    load_sequence, None, load_bookmark, True, None, bookmark_key
+                ])
+                # print(f"Registered hotkeys: '{save_sequence}' (save) and '{load_sequence}' (load) for bookmark '{section}'")
+    
+    # Register the hotkeys
+    for binding in dynamic_bindings:
+        # print('binding: ', binding)
+        # register_hotkey: Register a single keybinding (if it's not already registered). Returns True if the key didn't already exist and was added, else False (the binding is already registered - remove it first if  you wish to overwrite it with new event handlers).
+        if not register_hotkey(binding[0], binding[1], binding[2], binding[3], binding[4], binding[5]):
+            removed_success = remove_hotkey(binding[0])
+            print('removed_success for hotkey that was already registered: ', removed_success)
+            register_hotkey(binding[0], binding[1], binding[2], binding[3], binding[4], binding[5])
+        # else:
+        #     reg_success = register_hotkey(binding[0], binding[1], binding[2], binding[3], binding[4], binding[5])
+        #     print('reg_success for hotkey that was not registered: ', reg_success)
+            
+    # register_hotkeys(dynamic_bindings)
+    # print("Dynamic bookmark hotkeys registered.")
+
+# END BOOKMARK FUNCTIONS REGION
+
 
 # TO USE??? recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs) re recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs)
 
@@ -661,12 +756,13 @@ bindings = [
     ["control + alt + shift + c", None, make_discography_playlist, False, None, None],
     ["control + alt + shift + i", None, print_information, True, None, None],
     ["control + alt + shift + q", None, exit_program, True, None, None],
-    ["control + alt + shift + b, s", None, save_bookmark, True, None, None],
-    ["control + alt + shift + b, l", None, load_bookmark, True, None, None]
 ]
 
 # Register all of our keybindings
 register_hotkeys(bindings)
+
+# Register dynamic keybindings from .ini file.
+register_bookmark_hotkeys_from_ini()
 
 # Finally, start listening for keypresses
 start_checking_hotkeys()
