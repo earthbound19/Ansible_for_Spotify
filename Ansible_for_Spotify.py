@@ -107,7 +107,7 @@ def initialize_bookmarks_in_ini():
             set_option(bookmark_name, 'playlist_name', 'Unknown Playlist')
             set_option(bookmark_name, 'track_id', 'None')
             set_option(bookmark_name, 'position_ms', '0')
-            set_option(bookmark_name, 'key', str(i).lower())  # Key is 1, 2, 3, etc.
+            set_option(bookmark_name, 'key', i)
 
     # Save the INI file with these default bookmark sections
     with open('Ansible_for_Spotify.ini', 'w') as configfile:
@@ -595,8 +595,9 @@ def keepalive_attempt_hack_conditional_wiggle_seek():
 # A BOOKMARK IS A PLAYLIST, TRACK IN THE PLAYLIST, PLAYBACK POSITION IN THE TRACK, AND PLAYLIST NAME.
 # Function: Save the current playback as a bookmark with a specific key
 # TO DO:
+# - fix that on saving ANY bookmark it throws: Possible error saving bookmark: The hotkey [[['control', 'alt', 'shift', 'b'], ['1']]] is already registered.
 # - fix difficulty triggering bookmark hotkeys, if possible? I have to press the second hotkey in the sequence so fast. A way to tell the hotkey library to wait longer to register a second key combo in a sequence?
-# - fix that nothing can call the following function  unless a bookmark is defined - cannot dynamally make a NEW bookmark definition; WORKAROUND: have initialize_bookmarks_in_ini() pre-save 10 of them which can be overwritten, as they pre-exist:
+# - fix that nothing can call the following function unless a bookmark is defined - cannot dynamally make a NEW bookmark definition; WORKAROUND: have initialize_bookmarks_in_ini() pre-save 10 of them which can be overwritten, as they pre-exist:
 # - make it clearer in INI and / or somewhere in code how the chained (sequence) bookmark hotkeys work
 def save_bookmark(bookmark_key):
     try:
@@ -672,8 +673,6 @@ def load_bookmark(bookmark_key):
 
 # LOAD AND SAVE BOOKMARK HOTKEYS HARDCODED HERE:
 # Function: Dynamically generate and register bookmark hotkeys from the .ini file
-from functools import partial
-
 def register_bookmark_hotkeys_from_ini():
     dynamic_bindings = []
     for section in config.sections():
@@ -683,22 +682,13 @@ def register_bookmark_hotkeys_from_ini():
                 save_sequence = f"control + alt + shift + b, {bookmark_key}"
                 load_sequence = f"control + alt + shift + l, {bookmark_key}"
 # binding structure: ["hotkey", on_press_callback, on_release_callback, actuate_on_partial_release, press_callback_params, release_callback_params]
-# apparently failed binding dict definition? :
-# dynamic_bindings.append({
-#     "hotkey": save_sequence,
-#     "on_press_callback": None,
-#     "on_release_callback": save_bookmark,
-#     "actuate_on_partial_release": True,
-#     "callback_params": None,
-#     "release_callback_params": bookmark_key
-# })
                 dynamic_bindings.append([
                     save_sequence, None, save_bookmark, True, None, bookmark_key
                 ])
                 dynamic_bindings.append([
                     load_sequence, None, load_bookmark, True, None, bookmark_key
                 ])
-                # print(f"Registered hotkeys: '{save_sequence}' (save) and '{load_sequence}' (load) for bookmark '{section}'")
+                print(f"Registered hotkeys: '{save_sequence}' (save) and '{load_sequence}' (load) for bookmark '{section}'")
     
     # Register the hotkeys
     for binding in dynamic_bindings:
