@@ -67,6 +67,8 @@ def set_option_if_not(SECTION_NAME, OPTION_NAME, DESCRIPTIVE_COMMENT = None, REQ
             return None
 
 def set_option(SECTION_NAME, OPTION_NAME, OPTION_VALUE, DESCRIPTIVE_COMMENT = None):
+    # mitigate possible rong type error, though apparently name doesn't have to be a string:
+    SECTION_NAME = str(SECTION_NAME); OPTION_NAME = str(OPTION_NAME); OPTION_VALUE = str(OPTION_VALUE)
     if not config.has_section(SECTION_NAME):
         config.add_section(SECTION_NAME)
     config.set(SECTION_NAME, OPTION_NAME, OPTION_VALUE, comment = DESCRIPTIVE_COMMENT)
