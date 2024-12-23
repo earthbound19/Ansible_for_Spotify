@@ -38,6 +38,9 @@ See the see `bindings = [` comment/section in source code for details.
 
 Also, a hotkey to exit the program.
 
+### Known Issues
+It seems that the API call to delete a track from a list also deletes everything by the same artist from a list if you filter a playlist view by search term. This may also happen with the API to unsave a track from your Liked Songs. Untested.
+
 # TO DO (up next if not already in progress)
 - platform-universal systray that displays solid heart if currently playing track in user library, empty heart if not (to help overcome one of Spotify's greatest UI annoyances: the removal of at-a-glance information of whether a song is in the "liked songs" list!) - but to overcome that further, try the old UI via [Spot-X](https://github.com/SpotX-Official/SpotX) 
 - bookmarks save / load. by hotkey chord? e.g. [key combo to tell script we're saving a bookmark], [key to say which number of bookmark (1-9?)]
@@ -47,6 +50,7 @@ Also, a hotkey to exit the program.
 - Dynamic (re)defining playlists from/to .ini (including code that dynamically reassigns their associated hotkeys live)
 - A dynamic HUD GUI for display / search / assignment of various playlists to various variables (playlist numbers, sort playlist, discard playlist)
 - multiple playlist definitions and associated playlist manipulation hotkeys?
+- Upgrade discography playlist creation to be split into multiple playlists if it breaks the limit - Frederic Chopin broke it at 11,000!
 
 # WISH LIST (backlog)
 - Option to split music found by other artists into other discography playlists when building discography playlist(s)?
