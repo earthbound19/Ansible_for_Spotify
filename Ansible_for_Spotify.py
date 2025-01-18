@@ -21,7 +21,7 @@
 # TO DO
 # - error handling of everything so script execution never breaks and I can still infinitely retry creating the auth keys and client :)
 # - fetching recommended songs by genre? re https://stackoverflow.com/questions/61624487/extract-artist-genre-and-song-release-date-using-spotipy - although those genres can't be used directly? - but also https://tryapis.com/spotify/api/endpoint-get-recommendations
-# - things in the readmy
+# - things in the readme
 
 THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
 
@@ -99,6 +99,7 @@ PLAYLIST_ID_1 = set_option_if_not('USER_VARIABLES', 'PLAYLIST_ID_1', 'Optional p
 # !--------------------------------------------------------------------
 
 # SET DEFAULT / BLANK INI BOOKMARKS IF THERE ARE NONE
+# TO DO: clearer messages about whether / what it initialized? Because it says it did even if it didn't, I think.
 def initialize_bookmarks_in_ini():
     # Create bookmark sections if they don't exist
     for i in range(0, 10):  # Let's assume you want to create 10 bookmarks
@@ -168,7 +169,6 @@ def switch_to_device(device_id):
 # Function: pause or start playback, using other functions to find and switch to an active player if no player found:
 def pause_or_start_playback():
     # get player playback state and init global boolean of whether paused or playing.
-    # TO DO: function outside this that wraps sp.current_playback(), to handle if null or other return from the following because the API isn't connecting this script with any active player?
     try:
         playback = sp.current_playback()
         if not playback:  # If there's no playback context, find and switch to an active device
@@ -186,7 +186,7 @@ def pause_or_start_playback():
             sp.start_playback()
     except Exception as e:
         print(e)
-        print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player manually, then retry control from this script.")
+        print("~\nWARNING: no information retrieved for current_playback. If you're playing a device, maybe play and pause the player manually, then retry control from this script.")
     
 def previous_track():
     ret = sp.previous_track()
@@ -562,35 +562,19 @@ def unsave_and_move_from_current_playlist_to_discards():
         sp.playlist_remove_all_occurrences_of_items(playlist_ID, list_of_track_IDs)
         print("Added current track to discards playlist, removed it from current playlist and from liked songs, and will play the next song in the playlist.")
         sp.next_track()
-    except Exception as e:
-        print(e)
-        print("~\nUnsave and shuffle current track to discard playlist: no playlist context; cannot remove currently playing track from any playlist.")
+    except Exception as err:
+        print("~\nUnsave and shuffle current track to discard playlist: no playlist context; cannot remove currently playing track from any playlist. Printing the error response:")
+        print(err.response.json())
 
 # function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to cause at least the API client to forget the player. 
-def keepalive_attempt_hack_conditional_wiggle_seek():
+def keepalive_poll():
     try:
         info = sp.current_playback()
-        # possible workaround to keep player connection active; commented out for now:
-        if info is None:  # Handle case when no active playback is detected
-            print("No active playback. Searching for active player...")
-            active_device_id = find_active_device()
-            if active_device_id:
-                switch_to_device(active_device_id)
-                print("Switched to active device.")
-            else:
-                print("No devices available. Keepalive failed.")
-                return
-        # Continue only if playback info exists
-        if not info['is_playing']:
-            current_position  = info['progress_ms'] or 0  # Default to 0 if progress_ms
-            # deprecated current ms time acquire method:
-            # current_position  = sp.current_user_playing_track()['progress_ms']
-            sp.seek_track(current_position  + 64)
-            time.sleep(0.02)
-            sp.seek_track(current_position)
-            # print("~\nRan keepalive_attempt_hack_conditional_wiggle_seek.")
-    except Exception as e:
-        print("~\nWARNING: no information retrieved for current_playback. Maybe play and pause the player manually, then retry control from this script. OR There was some other error in run of playback position wiggle / keepalive.")
+        # That's it. I'm just hoping that querying playback status keeps this API client authenticated / active as far as the API host is concerned.
+        # print("~\nRan keepalive_poll.")
+    except Exception as err:
+        print("~\nError running function to attempt to retrieve playback info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
+        print(err.response.json())
 
 # START BOOKMARK FUNCTIONS REGION
 # NOTE THAT LOAD AND SAVE BOOKMARK HOTKEYS are hard-coded in one of these functions (see below).
@@ -684,13 +668,9 @@ def register_bookmark_hotkeys_from_ini():
                 save_sequence = f"control + alt + shift + b, {bookmark_key}"
                 load_sequence = f"control + alt + shift + l, {bookmark_key}"
 # binding structure: ["hotkey", on_press_callback, on_release_callback, actuate_on_partial_release, press_callback_params, release_callback_params]
-                dynamic_bindings.append([
-                    save_sequence, None, save_bookmark, True, None, bookmark_key
-                ])
-                dynamic_bindings.append([
-                    load_sequence, None, load_bookmark, True, None, bookmark_key
-                ])
-                print(f"Registered hotkeys: '{save_sequence}' (save) and '{load_sequence}' (load) for bookmark '{section}'")
+                dynamic_bindings.append([save_sequence, None, save_bookmark, True, None, bookmark_key])
+                dynamic_bindings.append([load_sequence, None, load_bookmark, True, None, bookmark_key])
+                # print(f"Registered hotkeys: '{save_sequence}' (save) and '{load_sequence}' (load) for bookmark '{section}'")
     
     # Register the hotkeys
     for binding in dynamic_bindings:
@@ -762,11 +742,11 @@ start_checking_hotkeys()
 # START: THINGS BETWEEN THIS AND THE END THIS COMMENT WILL RUN INDEFINITELY
 # re: https://stackoverflow.com/a/2223182
 # THIS IS AN ATTEMPT TO MAINTAIN API CLIENT AWARENESS OF THE MUSIC PLAYER.
-timer_interval = 55
+timer_interval = 82
 
 import threading
 def f(f_stop):
-    keepalive_attempt_hack_conditional_wiggle_seek()
+    keepalive_poll()
     if not f_stop.is_set():
         # call f() again in timer_interval seconds
         threading.Timer(timer_interval, f, [f_stop]).start()
