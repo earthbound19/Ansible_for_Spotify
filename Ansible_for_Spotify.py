@@ -185,8 +185,8 @@ def pause_or_start_playback():
         else:
             sp.start_playback()
     except Exception as e:
-        print(e)
         print("~\nWARNING: no information retrieved for current_playback. If you're playing a device, maybe play and pause the player manually, then retry control from this script.")
+        print(e)
     
 def previous_track():
     ret = sp.previous_track()
@@ -205,8 +205,8 @@ def save_track():
         sp.current_user_saved_tracks_add(list_of_track_IDs)
         print("Saved currently playing track", list_of_track_IDs, "to Liked Songs.")
     except Exception as e:
-        print(e)
         print("~\nCould not save current track (could not add to Liked Songs).")
+        print(e)
 
 def unsave_track():
     info = sp.current_user_playing_track()
@@ -217,8 +217,8 @@ def unsave_track():
         sp.current_user_saved_tracks_delete(list_of_track_IDs)
         print("Remove currently playing track", list_of_track_IDs, "from Liked Songs.")
     except Exception as e:
-        print(e)
         print("~\nCould not unsave current track (could not add to Liked Songs).")
+        print(e)
 
 # change repeat mode; cycles from current to next mode through track mode, context mode, and off:
 REPEAT_MODES = ['track', 'context', 'off']
@@ -247,7 +247,6 @@ def toggle_playback_shuffle():
 def seek_to_track_start():
     sp.seek_track(0)
     info = sp.current_playback()['progress_ms']
-    print(info)
 
 # set playback position forward or backward by seek_ms (milleseconds, negative or positive)
 def relative_seek(seek_ms):
@@ -323,8 +322,8 @@ def print_current_track_information(info):
         print("Track:\t", track_name)
         return True
     except Exception as e:
-        print(e)
         print("No current track context or not found?")
+        print(e)
         return False
 
 # TO DO: simplify other places that print this info if they do? By using this function?
@@ -341,12 +340,12 @@ def print_information():
             playlist_name = sp.playlist(playlist_ID, fields="name")['name']
             print("  name:", playlist_name)
         except Exception as e:
-            print(e)
             print("No currently playing playlist context? An album or podcast?")
+            print(e)
         success = print_current_track_information(info)
     except Exception as e:
-        print(e)
         print("Couldn't obtain track info from current context somehow, or other error?")
+        print(e)
         success = False
     print_playlist_1_info()
     if DISCARDS_PLAYLIST_ID:
@@ -355,8 +354,8 @@ def print_information():
             playlist_name = sp.playlist(DISCARDS_PLAYLIST_ID, fields="name")['name']
             print("  name:", playlist_name)
         except Exception as e:
-            print(e)
             print("~\nCouldn't obtain playlist information from current context somehow, or other error?")
+            print(e)
     else:
         print("~\nNo discards playlist id is set. Things may break if you try to use such a list.")
     if success == False:
@@ -432,11 +431,11 @@ def make_discography_playlist():
                         try:
                             sp.playlist_add_items(new_playlist_id, tracks_to_add)
                         except Exception as e:
-                            print(e)
                             print("WARNING: error attempting to add tracks to playlist ", new_playlist_id)
+                            print(e)
         except Exception as e:
-            print(e)
             print("Could not get albums (nor songs) information.")
+            print(e)
 
 # function: set a playlist for operations (such as adding a song from another playing list)
 def set_playlist_1():
@@ -460,11 +459,11 @@ def set_playlist_1():
             else:
                 print("~\nCurrent playlist not owned by current user. Can't assign to playlist 1.")
         except Exception as e:
-            print(e)
             print("~\nCurrent play context (not a playlist?) not owned by current user. Can't assign to playlist 1.")
+            print(e)
     except Exception as e:
-        print(e)
         print("~\nCouldn't obtain track info from current context somehow, or other error?")
+        print(e)
 
 def print_playlist_1_info():
     global PLAYLIST_ID_1
@@ -474,8 +473,8 @@ def print_playlist_1_info():
             playlist_name = sp.playlist(PLAYLIST_ID_1, fields="name")['name']
             print("  name:", playlist_name)
         except Exception as e:
-            print(e)
             print("~\nCouldn't obtain playlist information from current context somehow, or other error?")
+            print(e)
     else:
         print("~\nno PLAYLIST_ID_1 is set.")
 
@@ -533,8 +532,8 @@ def remove_current_track_from_current_playlist():
         # I've gone back and forth on wanting the following; now I don't :p
         # sp.next_track()
     except Exception as e:
-        print(e)
         print("~\nRemove current track from current playlist: cannot; no playlist context.")
+        print(e)
 
 def shuffle_current_track_to_playlist_1():
     try:
@@ -544,8 +543,8 @@ def shuffle_current_track_to_playlist_1():
         else:
             print("~\nConditions said don't add to playlist 1; didn't move anything.")
     except Exception as e:
-        print(e)
         print("~\nFailure shuffling current track to playlist 1 from current list.")
+        print(e)
 
 # Function: if in a playlist context, add currently playing track to discards playlist, remove it from currently playing playlist and user library (liked songs), and play the next song in the playlist.
 def unsave_and_move_from_current_playlist_to_discards():
@@ -562,9 +561,9 @@ def unsave_and_move_from_current_playlist_to_discards():
         sp.playlist_remove_all_occurrences_of_items(playlist_ID, list_of_track_IDs)
         print("Added current track to discards playlist, removed it from current playlist and from liked songs, and will play the next song in the playlist.")
         sp.next_track()
-    except Exception as err:
+    except Exception as e:
         print("~\nUnsave and shuffle current track to discard playlist: no playlist context; cannot remove currently playing track from any playlist. Printing the error response:")
-        print(err.response.json())
+        print(e)
 
 # function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to cause at least the API client to forget the player. 
 def keepalive_poll():
@@ -572,9 +571,9 @@ def keepalive_poll():
         info = sp.current_playback()
         # That's it. I'm just hoping that querying playback status keeps this API client authenticated / active as far as the API host is concerned.
         # print("~\nRan keepalive_poll.")
-    except Exception as err:
+    except Exception as e:
         print("~\nError running function to attempt to retrieve playback info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
-        print(err.response.json())
+        print(e)
 
 # START BOOKMARK FUNCTIONS REGION
 # NOTE THAT LOAD AND SAVE BOOKMARK HOTKEYS are hard-coded in one of these functions (see below).
@@ -630,7 +629,8 @@ def save_bookmark(bookmark_key):
 
         print(f"Bookmark '{bookmark_name}' saved and hotkeys updated.")
     except Exception as e:
-        print(f"\tPossible error saving bookmark: {e}")
+        print(f"\tPossible error saving bookmark.")
+        print(e)
 
 
 # Function: Load a bookmark by its second-level key
@@ -655,7 +655,8 @@ def load_bookmark(bookmark_key):
         print(f"Loaded bookmark '{playlist_id}'")
         print(f"Playlist Name '{playlist_name}'.")
     except Exception as e:
-        print(f"\tPossible error loading bookmark: {e}")
+        print(f"\tPossible error loading bookmark.")
+        print(e)
 
 # LOAD AND SAVE BOOKMARK HOTKEYS HARDCODED HERE:
 # Function: Dynamically generate and register bookmark hotkeys from the .ini file
