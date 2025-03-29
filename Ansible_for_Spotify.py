@@ -25,7 +25,8 @@
 
 THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
 
-import os, spotipy
+import os
+import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 # !----------------------------------------------------------------------
 # BEGIN INI PARSER create / read variables from ini into global variables
@@ -710,16 +711,16 @@ def register_bookmark_hotkeys_from_ini():
 # NOTE: although the documentation for that function says the release callback parameter should be a dict, I could not get that to work and it accepted just a value for it. ?
 bindings = [
     # basic:
-    ["control + alt + shift + home", None, pause_or_start_playback, True, None, None],
-    ["control + alt + shift + s", None, save_track, True, None, None],
-    ["control + alt + shift + u", None, unsave_track, True, None, None],
-    ["control + alt + shift + page_up", None, previous_track, True, None, None],
-    ["control + alt + shift + page_down", None, next_track, True, None, None],
     ["control + alt + shift + r", None, change_repeat_mode, True, None, None],
     ["control + alt + shift + f", None, toggle_playback_shuffle, False, None, None],
+    ["control + alt + shift + home", None, pause_or_start_playback, True, None, None],
     ["control + alt + shift + insert", None, seek_to_track_start, True, None, None],
     ["control + alt + shift + left", None, relative_seek, True, None, BACK_SEEK_MS],
     ["control + alt + shift + right", None, relative_seek, True, None, FORWARD_SEEK_MS],
+    ["control + alt + shift + page_up", None, previous_track, True, None, None],
+    ["control + alt + shift + page_down", None, next_track, True, None, None],
+    ["control + alt + shift + s", None, save_track, True, None, None],
+    ["control + alt + shift + u", None, unsave_track, True, None, None],
     # advanced:
     ["control + alt + shift + d", None, remove_current_track_from_current_playlist, False, None, None],
     ["control + alt + shift + x", None, unsave_and_move_from_current_playlist_to_discards, False, None, None],
@@ -740,7 +741,7 @@ register_bookmark_hotkeys_from_ini()
 # Finally, start listening for keypresses
 start_checking_hotkeys()
 
-# START: THINGS BETWEEN THIS AND THE END THIS COMMENT WILL RUN INDEFINITELY
+# START: THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
 # re: https://stackoverflow.com/a/2223182
 # THIS IS AN ATTEMPT TO MAINTAIN API CLIENT AWARENESS OF THE MUSIC PLAYER.
 timer_interval = 82
