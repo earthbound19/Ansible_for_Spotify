@@ -1,0 +1,60 @@
+# FIX FOR PROBLEM: you're on a corporate or other VPN that is associated with a custom SSL certificate store in Windows, which Python doesn't look at (as it uses its own local community-created store, certify), resulting in failed HTTPS calls because because.
+# A fix for this is to append the Windows certificate store to the python certificate store, creating a hybrid store. This script does that.
+# This script is saved with the .txt extension because because. To avoid running it by double clicking this Python script or whatever.
+# To use this script, rename the extension from .py.txt to .py, then run the script from python.
+# NOTES:
+# This backs up the existing store to .bak in case things borke, so you can revert quickly if need be.
+# This was developed and tested on Windows but has functions specific to Linux (Debian/Ubuntu) & macOS to copy their certificate stores. USE ON LINUX AND macOS IS UNTESTED, however.
+
+import ssl
+import certifi
+import shutil
+import sys
+
+# Backup the original certifi store (safety first!)
+certifi_path = certifi.where()
+backup_path = certifi_path + ".bak"
+shutil.copy2(certifi_path, backup_path)
+print(f"Backed up original certifi store to: {backup_path}")
+
+def get_system_certs():
+    """Fetch system CA certificates (cross-platform)."""
+    system_certs = []
+    
+    # Windows
+    if sys.platform == "win32":
+        for storename in ["CA", "ROOT"]:
+            for cert, encoding, _ in ssl.enum_certificates(storename):
+                if encoding == "x509_asn":
+                    try:
+                        pem_cert = ssl.DER_cert_to_PEM_cert(cert)
+                        system_certs.append(pem_cert)
+                    except ssl.SSLError:
+                        continue
+    
+    # Linux (Debian/Ubuntu) & macOS
+    else:
+        # Common system CA paths
+        ca_paths = [
+            "/etc/ssl/certs/ca-certificates.crt",  # Debian/Ubuntu
+            "/etc/pki/tls/certs/ca-bundle.crt",    # RHEL/CentOS
+            "/usr/local/etc/openssl/cert.pem",     # macOS (Homebrew)
+            "/etc/ssl/cert.pem",                   # Alpine
+        ]
+        for path in ca_paths:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    system_certs.append(f.read())
+                break
+    
+    return system_certs
+
+# Get system certs and append to certifi
+system_certs = get_system_certs()
+if not system_certs:
+    print("Warning: No system certificates found!")
+else:
+    with open(certifi_path, "a") as f:
+        for cert in system_certs:
+            f.write("\n" + cert)
+    print(f"Patched Python's local certificate {certifi_path} with system CA certificates! Done.")
