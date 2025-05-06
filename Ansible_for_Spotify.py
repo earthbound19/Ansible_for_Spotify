@@ -37,10 +37,10 @@ config = ExtendedConfigParser()
 
 # check if config file exists; if not, create it blank; otherwise open it:
 if not os.path.exists('Ansible_for_Spotify.ini'):
-    with open('Ansible_for_Spotify.ini', 'w') as configfile:
+    with open('Ansible_for_Spotify.ini', 'w', encoding='UTF-8') as configfile:
             config.write('')
 # parse file (does nothing if empty file) :
-config.read('Ansible_for_Spotify.ini')
+config.read('Ansible_for_Spotify.ini', encoding='UTF-8')
 
 # Function to check for options in section and create them if they don't exist. NOTES:
 # - config.read() must be run first.
@@ -55,7 +55,7 @@ def set_option_if_not(SECTION_NAME, OPTION_NAME, DESCRIPTIVE_COMMENT = None, REQ
             print('\n' + DESCRIPTIVE_COMMENT)
         option_value = input(OPTION_NAME + " not set. Enter it:\n")
         config.set(SECTION_NAME, OPTION_NAME, option_value, comment = DESCRIPTIVE_COMMENT)
-        with open('Ansible_for_Spotify.ini', 'w') as configfile:
+        with open('Ansible_for_Spotify.ini', 'w', encoding='UTF-8') as configfile:
             config.write(configfile)
             # print("Wrote section ", SECTION_NAME, "option/value ", OPTION_NAME, option_value, "To .ini and variable.")
         return option_value
@@ -73,7 +73,7 @@ def set_option(SECTION_NAME, OPTION_NAME, OPTION_VALUE, DESCRIPTIVE_COMMENT = No
     if not config.has_section(SECTION_NAME):
         config.add_section(SECTION_NAME)
     config.set(SECTION_NAME, OPTION_NAME, OPTION_VALUE, comment = DESCRIPTIVE_COMMENT)
-    with open('Ansible_for_Spotify.ini', 'w') as configfile:
+    with open('Ansible_for_Spotify.ini', 'w', encoding='UTF-8') as configfile:
         config.write(configfile)
         # print("Wrote section ", SECTION_NAME, "option/value ", OPTION_NAME, OPTION_VALUE, "To .ini and variable.")
 
@@ -114,7 +114,7 @@ def initialize_bookmarks_in_ini():
             set_option(bookmark_name, 'key', i)
 
     # Save the INI file with these default bookmark sections
-    with open('Ansible_for_Spotify.ini', 'w') as configfile:
+    with open('Ansible_for_Spotify.ini', 'w', encoding='UTF-8') as configfile:
         config.write(configfile)
         print("Initialized default blank bookmark sections in INI.")
 
@@ -376,7 +376,7 @@ def make_discography_playlist():
             print("  Artist(s):")
             for artist in artists:
                 # optional dev empty of debug.txt:
-                f = open("debug.txt", "w")
+                f = open("debug.txt", "w", encoding='utf_8')
                 f.write("")
                 f.close()
                 discography_artist_name = artist['name']; artist_id = artist['id']; artist_URL = artist['external_urls']['spotify']
@@ -621,7 +621,7 @@ def save_bookmark(bookmark_key):
         set_option(bookmark_name, 'key', bookmark_key)
 
         # Re-read the configuration file to ensure changes are applied?
-        # config.read('Ansible_for_Spotify.ini')
+        # config.read('Ansible_for_Spotify.ini', encoding='UTF-8')
         
         print('Bookmark saved (hopefully) for ', bookmark_key, '.')
 
