@@ -575,6 +575,11 @@ def keepalive_poll():
     except Exception as e:
         print("~\nError running function to attempt to retrieve playback info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
         print(e)
+	# OPTIONAL: uncomment the remainder of this function to turn this script into a keepalive tool, by using a hotkey (key combination) that does nothing:
+    # if 'pyautogui' not in globals():
+    #     import pyautogui
+    # pyautogui.FAILSAFE = False
+    # pyautogui.hotkey('altleft', 'pageup')     # a keypress instead would look like: pyautogui.typewrite(['fn', '\r'])
 
 # START BOOKMARK FUNCTIONS REGION
 # NOTE THAT LOAD AND SAVE BOOKMARK HOTKEYS are hard-coded in one of these functions (see below).
