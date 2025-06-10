@@ -191,10 +191,12 @@ def pause_or_start_playback():
     
 def previous_track():
     ret = sp.previous_track()
+    update_info_window()
 
 # Function: advance playback to next track
 def next_track():
     ret = sp.next_track()
+    update_info_window()
 
 # Function: save currently playing track to user library ("like" current song)
 def save_track():
@@ -205,6 +207,7 @@ def save_track():
         list_of_track_IDs = [track_ID]
         sp.current_user_saved_tracks_add(list_of_track_IDs)
         print("Saved currently playing track", list_of_track_IDs, "to Liked Songs.")
+        update_info_window()
     except Exception as e:
         print("~\nCould not save current track (could not add to Liked Songs).")
         print(e)
@@ -217,6 +220,7 @@ def unsave_track():
         list_of_track_IDs = [track_ID]
         sp.current_user_saved_tracks_delete(list_of_track_IDs)
         print("Remove currently playing track", list_of_track_IDs, "from Liked Songs.")
+        update_info_window()
     except Exception as e:
         print("~\nCould not unsave current track (could not add to Liked Songs).")
         print(e)
@@ -308,9 +312,9 @@ def get_artist_albums(artist):
 #         logger.info('Genres: %s', ','.join(artist['genres']))
 
 # Print information related to currenlty playing track. Also a gatekeeper function returning False if no playing track, and True and a playback info object from sp.current_user_playing_track().
-# print track info; must be passed an info object obtained via: info = sp.current_user_playing_track()
-def print_current_track_information(info):
+def print_current_track_information():
     try:
+        info = sp.current_user_playing_track()
         track_URL = info['item']['external_urls']['spotify']
         artists = info['item']['artists']
         print("Current track ID:", track_URL)
@@ -321,14 +325,6 @@ def print_current_track_information(info):
         track_name = info['item']['name']
         print("Album:\t", album)
         print("Track:\t", track_name)
-        track_ID = info['item']['id']
-        # This function expects a list, so track_ID is put into on in the call by surrounding it with []:
-        is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_ID])
-        # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:
-        if is_in_user_saved_tracks[0]:
-            print("💚🎵💛 Currently playing track is in user saved tracks (Liked Songs)!")
-        else:
-            print("🖤❎💔 Currently playing track is NOT in user saved tracks (Liked Songs).")
         return True
     except Exception as e:
         print("No current track context, or not found, or other API error?")
@@ -348,10 +344,10 @@ def print_information():
             playlist_ID = info['context']['external_urls']['spotify']
             playlist_name = sp.playlist(playlist_ID, fields="name")['name']
             print("  name:", playlist_name)
+            success = print_current_track_information()
         except Exception as e:
             print("No currently playing playlist context? An album or podcast?")
             print(e)
-        success = print_current_track_information(info)
     except Exception as e:
         print("Couldn't obtain track info from current context somehow, or other error?")
         print(e)
@@ -367,10 +363,28 @@ def print_information():
             print(e)
     else:
         print("~\nNo discards playlist id is set. Things may break if you try to use such a list.")
+    update_info_window()
     if success == False:
         return False
     else:
         return True, info
+
+# to do: make an optional info parameter here, to avoid duplicate sp.current_user_playing_track() call? :
+def update_info_window():
+    info_window.update_glyph("❓")
+    time.sleep(0.8)
+    info = sp.current_user_playing_track()
+    track_ID = info['item']['id']
+    # wait ~1 second before calling print track info because it can take a bit before a track change happens:
+    # This function expects a list, so track_ID is put into on in the call by surrounding it with []:
+    is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_ID])
+    # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:
+    if is_in_user_saved_tracks[0]:
+        print("💚🎵💛 Currently playing track ID " + track_ID + " is in user saved tracks (Liked Songs)!")
+        info_window.update_glyph("🖤")
+    else:
+        print("🖤 Currently playing track ID " + track_ID + " is NOT in user saved tracks (Liked Songs).")
+        info_window.update_glyph("🤍")
 
 # make discography playlist from the artist of the currently playing song.
 def make_discography_playlist():
@@ -499,7 +513,7 @@ def add_current_track_to_playlist_1():
         info = sp.current_user_playing_track()
         track_id_to_add = info['item']['external_urls']['spotify']
         list_of_track_IDs = [track_id_to_add]
-        print_current_track_information(info)
+        print_current_track_information()
         # get info of target playlist to parse:
         # prior, deprecated track retrieve method; seems I couldn't paginate with it though:
         # items = sp.playlist(PLAYLIST_ID_1)['tracks']['items']
@@ -563,7 +577,7 @@ def unsave_and_move_from_current_playlist_to_discards():
         playlist_ID = info['context']['external_urls']['spotify']
         print("~\nDiscards playlist ID:", DISCARDS_PLAYLIST_ID)
         print("Current playlist ID:", playlist_ID)
-        print_current_track_information(info)
+        print_current_track_information()
         track_ID = info['item']['external_urls']['spotify']
         list_of_track_IDs = [track_ID]
         sp.playlist_add_items(DISCARDS_PLAYLIST_ID, list_of_track_IDs)
@@ -574,6 +588,7 @@ def unsave_and_move_from_current_playlist_to_discards():
     except Exception as e:
         print("~\nUnsave and shuffle current track to discard playlist: no playlist context; cannot remove currently playing track from any playlist. Printing the error response:")
         print(e)
+    update_info_window()
 
 # function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to cause at least the API client to forget the player. 
 def keepalive_poll():
@@ -769,7 +784,14 @@ def f(f_stop):
 f_stop = threading.Event()
 # start calling f now and every timer_interval seconds thereafter
 f(f_stop)
-# END: THINGS BETWEEN THIS AND THE END THIS COMMENT WILL RUN INDEFINITELY
+
+import current_track_in_user_tracks_display
+info_window = current_track_in_user_tracks_display.GlyphWindow()
+# info_window.update_glyph("❓")
+update_info_window()
+info_window.run()
+
+# END: THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
 
 # everything after this will only run once
 # Monitor global keybindings with an eternal while loop:
