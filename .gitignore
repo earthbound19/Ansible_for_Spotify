@@ -1,3 +1,4 @@
 *.ini
 *.cache*
 debug.txt
+__pycache__
