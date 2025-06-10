@@ -188,6 +188,7 @@ def pause_or_start_playback():
     except Exception as e:
         print("~\nWARNING: no information retrieved for current_playback. If you're playing a device, maybe play and pause the player manually, then retry control from this script.")
         print(e)
+    update_info_window()
     
 def previous_track():
     ret = sp.previous_track()
@@ -369,7 +370,6 @@ def print_information():
     else:
         return True, info
 
-# to do: make an optional info parameter here, to avoid duplicate sp.current_user_playing_track() call? :
 def update_info_window():
     info_window.update_glyph("❓")
     time.sleep(0.8)
