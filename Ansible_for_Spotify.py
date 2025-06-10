@@ -311,9 +311,9 @@ def get_artist_albums(artist):
 # print track info; must be passed an info object obtained via: info = sp.current_user_playing_track()
 def print_current_track_information(info):
     try:
-        track_ID = info['item']['external_urls']['spotify']
+        track_URL = info['item']['external_urls']['spotify']
         artists = info['item']['artists']
-        print("Current track ID:", track_ID)
+        print("Current track ID:", track_URL)
         print("Artist(s):")
         for artist in artists:
             print("\t", artist['name'])                
@@ -321,9 +321,17 @@ def print_current_track_information(info):
         track_name = info['item']['name']
         print("Album:\t", album)
         print("Track:\t", track_name)
+        track_ID = info['item']['id']
+        # This function expects a list, so track_ID is put into on in the call by surrounding it with []:
+        is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_ID])
+        # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:
+        if is_in_user_saved_tracks[0]:
+            print("💚🎵💛 Currently playing track is in user saved tracks (Liked Songs)!")
+        else:
+            print("🖤❎💔 Currently playing track is NOT in user saved tracks (Liked Songs).")
         return True
     except Exception as e:
-        print("No current track context or not found?")
+        print("No current track context, or not found, or other API error?")
         print(e)
         return False
 
@@ -376,6 +384,7 @@ def make_discography_playlist():
             print("  Artist(s):")
             for artist in artists:
                 # optional dev empty of debug.txt:
+                # TO DO: open and close that file only once instead of repeatedly in a loop over artists here?
                 f = open("debug.txt", "w", encoding='utf_8')
                 f.write("")
                 f.close()
