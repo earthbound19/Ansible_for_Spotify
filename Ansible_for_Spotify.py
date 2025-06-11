@@ -28,6 +28,8 @@ THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
 import os
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+import threading
+
 # !----------------------------------------------------------------------
 # BEGIN INI PARSER create / read variables from ini into global variables
 from extended_configparser.parser import ExtendedConfigParser
@@ -370,12 +372,17 @@ def print_information():
     else:
         return True, info
 
+# this function is a stub that creates a threaded function call, because if the called function was not threaded, it would be blocking, as it uses time.sleep. If it weren't threaded, the time.sleep wait could block user hotkey presses, which would annoyingly prevent the user from using the hotkeys during time.sleep. Threaded, it's non-blocking, and the user can use the hotkeys while it's running.
 def update_info_window():
+    thread = threading.Thread(target=threaded_update_info_window)
+    thread.start()
+
+def threaded_update_info_window():
     info_window.update_glyph("❓")
-    time.sleep(0.8)
+    # wait a bit before calling print track info because it can take a bit before a track change happens:
+    time.sleep(0.67)
     info = sp.current_user_playing_track()
     track_ID = info['item']['id']
-    # wait ~1 second before calling print track info because it can take a bit before a track change happens:
     # This function expects a list, so track_ID is put into on in the call by surrounding it with []:
     is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_ID])
     # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:
@@ -778,6 +785,7 @@ timer_interval = 82
 import threading
 def f(f_stop):
     keepalive_poll()
+    update_info_window()
     if not f_stop.is_set():
         # call f() again in timer_interval seconds
         threading.Timer(timer_interval, f, [f_stop]).start()
