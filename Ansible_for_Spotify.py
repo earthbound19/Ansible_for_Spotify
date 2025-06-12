@@ -19,7 +19,8 @@
 
 # CODE
 # TO DO
-# - error handling of everything so script execution never breaks and I can still infinitely retry creating the auth keys and client :)
+# - move error handling of info window update into that function instead of handling that many places outside that function (which I think I'm doing)?
+# / (maybe done?) error handling of everything so script execution never breaks and I can still infinitely retry creating the auth keys and client :)
 # - fetching recommended songs by genre? re https://stackoverflow.com/questions/61624487/extract-artist-genre-and-song-release-date-using-spotipy - although those genres can't be used directly? - but also https://tryapis.com/spotify/api/endpoint-get-recommendations
 # - things in the readme
 
@@ -29,6 +30,7 @@ import os
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import threading
+from threading import Thread
 
 # !----------------------------------------------------------------------
 # BEGIN INI PARSER create / read variables from ini into global variables
@@ -210,7 +212,8 @@ def save_track():
         list_of_track_IDs = [track_ID]
         sp.current_user_saved_tracks_add(list_of_track_IDs)
         print("Saved currently playing track", list_of_track_IDs, "to Liked Songs.")
-        update_info_window()
+        print("Attempted confirm:")
+        update_info_window(CLI_print = True)
     except Exception as e:
         print("~\nCould not save current track (could not add to Liked Songs).")
         print(e)
@@ -223,7 +226,8 @@ def unsave_track():
         list_of_track_IDs = [track_ID]
         sp.current_user_saved_tracks_delete(list_of_track_IDs)
         print("Remove currently playing track", list_of_track_IDs, "from Liked Songs.")
-        update_info_window()
+        print("Attempted confirmation:")
+        update_info_window(CLI_print = True)
     except Exception as e:
         print("~\nCould not unsave current track (could not add to Liked Songs).")
         print(e)
@@ -320,7 +324,7 @@ def print_current_track_information():
         info = sp.current_user_playing_track()
         track_URL = info['item']['external_urls']['spotify']
         artists = info['item']['artists']
-        print("Current track ID:", track_URL)
+        print("Current track URL (ends with ID) :", track_URL)
         print("Artist(s):")
         for artist in artists:
             print("\t", artist['name'])                
@@ -351,6 +355,11 @@ def print_information():
         except Exception as e:
             print("No currently playing playlist context? An album or podcast?")
             print(e)
+        try:
+            update_info_window(CLI_print = True)
+        except Exception as e:
+            print("Error attempting to update user saved tracks (Liked Songs) track info_window:")
+            print(e)
     except Exception as e:
         print("Couldn't obtain track info from current context somehow, or other error?")
         print(e)
@@ -366,32 +375,47 @@ def print_information():
             print(e)
     else:
         print("~\nNo discards playlist id is set. Things may break if you try to use such a list.")
-    update_info_window()
     if success == False:
         return False
     else:
         return True, info
 
 # this function is a stub that creates a threaded function call, because if the called function was not threaded, it would be blocking, as it uses time.sleep. If it weren't threaded, the time.sleep wait could block user hotkey presses, which would annoyingly prevent the user from using the hotkeys during time.sleep. Threaded, it's non-blocking, and the user can use the hotkeys while it's running.
-def update_info_window():
-    thread = threading.Thread(target=threaded_update_info_window)
+# First required parameter is an object that is an instance of class GlyphWindow
+# Can take an optional parameter CLI_print which when passed to the threaded function causes it to print info to CLI.
+def update_info_window(CLI_print = False):
+    global info_window
+    # pass on the CLI_print parameter:
+    thread = threading.Thread(target=threaded_update_info_window, args = [CLI_print])
     thread.start()
 
-def threaded_update_info_window():
-    info_window.update_glyph("❓")
+# can pass along optional parameter; if this parameter is passed and is anything other than False, info is printed to the CLI about whether the currently playing track is in the user's saved tracks (Liked Songs) :
+def threaded_update_info_window(CLI_print = False):
+    # It seems that right at script launch, info_window doesn't exist for a bit, so this has to be tried end excepted:
+    try:
+        info_window.update_glyph("❓")
+    except:
+        print("No glyph info_window object to update (yet?), apparently.")
     # wait a bit before calling print track info because it can take a bit before a track change happens:
     time.sleep(0.67)
-    info = sp.current_user_playing_track()
-    track_ID = info['item']['id']
-    # This function expects a list, so track_ID is put into on in the call by surrounding it with []:
-    is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_ID])
-    # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:
-    if is_in_user_saved_tracks[0]:
-        print("💚🎵💛 Currently playing track ID " + track_ID + " is in user saved tracks (Liked Songs)!")
-        info_window.update_glyph("🖤")
-    else:
-        print("🖤 Currently playing track ID " + track_ID + " is NOT in user saved tracks (Liked Songs).")
-        info_window.update_glyph("🤍")
+    try:
+        info = sp.current_user_playing_track()
+    except Exception as e:
+        print("Error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
+        print(e)
+    if info != None:
+        track_ID = info['item']['id']
+        # This function expects a list, so track_ID is put into on in the call by surrounding it with []:
+        is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_ID])
+        # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:
+        if is_in_user_saved_tracks[0]:
+            if CLI_print != False:
+                print("💚🎵💛 Currently playing track ID " + track_ID + " is in user saved tracks (Liked Songs)!")
+            info_window.update_glyph("🖤")
+        else:
+            if CLI_print != False:
+                print("🖤 Currently playing track ID " + track_ID + " is NOT in user saved tracks (Liked Songs).")
+            info_window.update_glyph("🤍")
 
 # make discography playlist from the artist of the currently playing song.
 def make_discography_playlist():
@@ -406,9 +430,9 @@ def make_discography_playlist():
             for artist in artists:
                 # optional dev empty of debug.txt:
                 # TO DO: open and close that file only once instead of repeatedly in a loop over artists here?
-                f = open("debug.txt", "w", encoding='utf_8')
-                f.write("")
-                f.close()
+                # f = open("debug.txt", "w", encoding='utf_8')
+                # f.write("")
+                # f.close()
                 discography_artist_name = artist['name']; artist_id = artist['id']; artist_URL = artist['external_urls']['spotify']
                 print(" ", discography_artist_name, artist_id, artist_URL)
                 all_artists_tracks = []
@@ -591,11 +615,12 @@ def unsave_and_move_from_current_playlist_to_discards():
         sp.current_user_saved_tracks_delete(list_of_track_IDs)
         sp.playlist_remove_all_occurrences_of_items(playlist_ID, list_of_track_IDs)
         print("Added current track to discards playlist, removed it from current playlist and from liked songs, and will play the next song in the playlist.")
+        print("Attempted confirm:")
+        update_info_window(CLI_print = True)
         sp.next_track()
     except Exception as e:
         print("~\nUnsave and shuffle current track to discard playlist: no playlist context; cannot remove currently playing track from any playlist. Printing the error response:")
         print(e)
-    update_info_window()
 
 # function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to cause at least the API client to forget the player. 
 def keepalive_poll():
@@ -792,14 +817,40 @@ def f(f_stop):
 f_stop = threading.Event()
 # start calling f now and every timer_interval seconds thereafter
 f(f_stop)
+# END: THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
+
+# START: OTHER THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
+# re https://stackoverflow.com/a/2223191 - another answer with the above linked, which seems like a far simpler way to implement a repeated threaded task? And maybe would obviate other code my above timer calls needing threading?
+# TO DO: ^ EXAMINE THAT and re-implement it if it is simpler
+# POLL the current playing track ID every N seconds (wait_between_checks), and update the info window glyph if it has changed, to keep display of whether the current playing track is in the user saved tracks (Liked Songs) pretty current:
+last_remembered_track_ID = ''
+wait_between_checks = 6.3
+class BackgroundTimer(Thread):
+    def run(self):
+        global last_remembered_track_ID
+        while 1:
+            time.sleep(wait_between_checks)
+            try:
+                info = sp.current_user_playing_track()
+            except Exception as e:
+                print("Error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
+                print(e)
+            if info != None:
+                current_track_ID = info['item']['id']
+                if last_remembered_track_ID != current_track_ID:
+                    print("Active playback polling: DIFFERENT track ID ", current_track_ID, " than last seen " + last_remembered_track_ID + " -- will try to update user saved tracks (Liked Songs) track info_window.")
+                    update_info_window(CLI_print = True)
+                    last_remembered_track_ID = current_track_ID
+timer = BackgroundTimer()
+timer.start()
+# END: OTHER THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
 
 import current_track_in_user_tracks_display
+# info_window is a global used all over the place!
 info_window = current_track_in_user_tracks_display.GlyphWindow()
-# info_window.update_glyph("❓")
+# info_window.update_glyph("_")
 update_info_window()
 info_window.run()
-
-# END: THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
 
 # everything after this will only run once
 # Monitor global keybindings with an eternal while loop:
