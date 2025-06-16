@@ -332,6 +332,12 @@ def print_current_track_information():
         track_name = info['item']['name']
         print("Album:\t", album)
         print("Track:\t", track_name)
+        # OPTIONAL info write to txt file; comment out for production:
+        # f = open("debug.txt", "a")
+        # f.write("\n------------------------------------\n")
+        # f.write(json.dumps(info, indent=4))
+        # f.close()
+        # print("------Wrote info from write_currently_playing_track_info() call to debug.txt.")
         return True
     except Exception as e:
         print("No current track context, or not found, or other API error?")
@@ -405,17 +411,23 @@ def threaded_update_info_window(CLI_print = False):
         print(e)
     if info != None:
         track_ID = info['item']['id']
+        print("YYYYYY")
+        album = info['item']['album']['name']
+        track_name = info['item']['name']
+        print(album)
+        print(track_name)
         # This function expects a list, so track_ID is put into on in the call by surrounding it with []:
         is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_ID])
         # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:
         if is_in_user_saved_tracks[0]:
             if CLI_print != False:
                 print("💚🎵💛 Currently playing track ID " + track_ID + " is in user saved tracks (Liked Songs)!")
-            info_window.update_glyph("🖤")
+            info_window.update_glyph("🖤\n~ " + album + "\n ~ " + track_name)
+            #  + "\n" + album_name + "\n" + track_name
         else:
             if CLI_print != False:
                 print("🖤 Currently playing track ID " + track_ID + " is NOT in user saved tracks (Liked Songs).")
-            info_window.update_glyph("🤍")
+            info_window.update_glyph("🤍\n~ " + album + "\n ~" + track_name)
 
 # make discography playlist from the artist of the currently playing song.
 def make_discography_playlist():
@@ -453,11 +465,6 @@ def make_discography_playlist():
                             # TO DO? - make a separate playlist with these? Or a config item to optionally include them?
                             # else:
                                 # all_related_artists_tracks.append(track['external_urls']['spotify'])
-                        # f = open("debug.txt", "a")
-                        # f.write("\n------------------------------------\n")
-                        # f.write(json.dumps(track, indent=4))
-                        # f.close()
-                        # print("Wrote info from write_currently_playing_track_info() call to debug.txt.")
                 print("Done collectiong all tracks for artist. Building discography playlist . . .")
                 random_playlist_name_suffix = ''.join((random.choice(' ▔▀▆▄▂▌▐█▊▎░▒▓▖▗▘▙▚▛▜▝▞▟') for i in range(4)))
                 new_playlist_name = discography_artist_name + " ~" + random_playlist_name_suffix

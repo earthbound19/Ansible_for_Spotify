@@ -9,7 +9,7 @@ class GlyphWindow:
         self.glyph = glyph
         self.window_is_open = False
 
-        self.canvas = tk.Canvas(self.root, width=100, height=100)
+        self.canvas = tk.Canvas(self.root, width=200, height=200)
         self.canvas.pack()
 
         self.draw_glyph()
@@ -18,7 +18,7 @@ class GlyphWindow:
 
     def draw_glyph(self):
         self.canvas.delete("all")
-        self.canvas.create_text(50, 50, text=self.glyph, font=("Arial", 20))
+        self.canvas.create_text(100, 100, text=self.glyph, font=("Arial", 16), justify=tk.CENTER, width=178)
 
     def update_glyph(self, new_glyph):
         self.glyph = new_glyph
