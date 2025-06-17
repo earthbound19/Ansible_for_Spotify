@@ -346,6 +346,7 @@ def print_current_track_information():
 
 # TO DO: simplify other places that print this info if they do? By using this function?
 def print_information():
+    print_playlist_1_info()
     # boolean that may be overriden depending:
     success = True
     info = sp.current_user_playing_track()
@@ -370,7 +371,6 @@ def print_information():
         print("Couldn't obtain track info from current context somehow, or other error?")
         print(e)
         success = False
-    print_playlist_1_info()
     if DISCARDS_PLAYLIST_ID:
         print("~\nDiscards playlist ID:", DISCARDS_PLAYLIST_ID)
         try:
