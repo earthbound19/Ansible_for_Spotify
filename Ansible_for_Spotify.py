@@ -173,7 +173,6 @@ def switch_to_device(device_id):
 
 # Function: pause or start playback, using other functions to find and switch to an active player if no player found:
 def pause_or_start_playback():
-    # get player playback state and init global boolean of whether paused or playing.
     try:
         playback = sp.current_playback()
         if not playback:  # If there's no playback context, find and switch to an active device
@@ -189,6 +188,11 @@ def pause_or_start_playback():
             sp.pause_playback()
         else:
             sp.start_playback()
+            # global used elsewhere to determine whether to poll API based on playback state:
+            global continue_keepalive_poll
+            continue_keepalive_poll = True
+            # debug print only; comment out for production:
+            # print("Set continue_keepalive_poll to True.")
     except Exception as e:
         print("~\nWARNING: no information retrieved for current_playback. If you're playing a device, maybe play and pause the player manually, then retry control from this script.")
         print(e)
@@ -332,12 +336,6 @@ def print_current_track_information():
         track_name = info['item']['name']
         print("Album:\t", album)
         print("Track:\t", track_name)
-        # OPTIONAL info write to txt file; comment out for production:
-        # f = open("debug.txt", "a")
-        # f.write("\n------------------------------------\n")
-        # f.write(json.dumps(info, indent=4))
-        # f.close()
-        # print("------Wrote info from write_currently_playing_track_info() call to debug.txt.")
         return True
     except Exception as e:
         print("No current track context, or not found, or other API error?")
@@ -626,20 +624,48 @@ def unsave_and_move_from_current_playlist_to_discards():
         print("~\nUnsave and shuffle current track to discard playlist: no playlist context; cannot remove currently playing track from any playlist. Printing the error response:")
         print(e)
 
+keepalive_playback_paused_poll_count = 0
+continue_keepalive_poll = True
 # function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to cause at least the API client to forget the player. 
 def keepalive_poll():
-    try:
-        info = sp.current_playback()
-        # That's it. I'm just hoping that querying playback status keeps this API client authenticated / active as far as the API host is concerned.
-        # print("~\nRan keepalive_poll.")
-    except Exception as e:
-        print("~\nError running function to attempt to retrieve playback info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
-        print(e)
-	# OPTIONAL: uncomment the remainder of this function to turn this script into a keepalive tool, by using a hotkey (key combination) that does nothing:
-    # if 'pyautogui' not in globals():
-    #     import pyautogui
-    # pyautogui.FAILSAFE = False
-    # pyautogui.hotkey('altleft', 'pageup')     # a keypress instead would look like: pyautogui.typewrite(['fn', '\r'])
+    global keepalive_playback_paused_poll_count
+    global continue_keepalive_poll
+    # NOTE: because this will lever execute if that's false, the following boolean must be set True somewhere else!
+    if continue_keepalive_poll:
+        try:
+            info = sp.current_playback()
+            # OPTIONAL info write to txt file; comment out for production:
+            # f = open("debug.txt", "a")        # alternately use this to append instead of overwrite
+            # f = open("debug.txt", "w", encoding='utf_8')
+            # f.write("\n------------------------------------\n")
+            # f.write(json.dumps(info, indent=4))
+            # f.close()
+            # print("------Wrote info from current_playback() call to debug.txt.")
+            if info['is_playing'] == False or info['is_playing'] == None:
+                keepalive_playback_paused_poll_count += 1
+                # debug print only; comment out in production:
+                # print("Playback may be paused; keepalive_playback_paused_poll_count is", keepalive_playback_paused_poll_count)
+                # if we've queried this 4 times and it's paused, stop spamming the API; exit the script.
+                if keepalive_playback_paused_poll_count == 6:
+                    continue_keepalive_poll = False
+                    print("Playback found to be paused through 6 checks; suspending keepalive attempts until you manually resume playback with a hotkey from this script _or_ restart the script.")
+                    # print("Playback found to be paused through 6 checks; quitting script to avoid API queries. Exit code 1.")
+                    # os._exit(1)
+            else:
+                # reset paused playback counter:
+                keepalive_playback_paused_poll_count = 0
+                # debug print only; comment out in production:
+                # print("Playback may be active; keepalive_playback_paused_poll_count is", keepalive_playback_paused_poll_count)
+            # That's it. I'm just hoping that querying playback status keeps this API client authenticated / active as far as the API host is concerned.
+            # print("~\nRan keepalive_poll.")
+        except Exception as e:
+            print("~\nError running function to attempt to retrieve playback info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
+            print(e)
+        # OPTIONAL: uncomment the remainder of this function to turn this script into a keepalive tool, by using a hotkey (key combination) that does nothing:
+        # if 'pyautogui' not in globals():
+        #     import pyautogui
+        # pyautogui.FAILSAFE = False
+        # pyautogui.hotkey('altleft', 'pageup')     # a keypress instead would look like: pyautogui.typewrite(['fn', '\r'])
 
 # START BOOKMARK FUNCTIONS REGION
 # NOTE THAT LOAD AND SAVE BOOKMARK HOTKEYS are hard-coded in one of these functions (see below).
@@ -828,23 +854,32 @@ f(f_stop)
 # TO DO: ^ EXAMINE THAT and re-implement it if it is simpler
 # POLL the current playing track ID every N seconds (wait_between_checks), and update the info window glyph if it has changed, to keep display of whether the current playing track is in the user saved tracks (Liked Songs) pretty current:
 last_remembered_track_ID = ''
-wait_between_checks = 6.3
+wait_between_checks = 6.5
 class BackgroundTimer(Thread):
     def run(self):
         global last_remembered_track_ID
+        global continue_keepalive_poll
         while 1:
             time.sleep(wait_between_checks)
-            try:
-                info = sp.current_user_playing_track()
-            except Exception as e:
-                print("Error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
-                print(e)
-            if info != None:
-                current_track_ID = info['item']['id']
-                if last_remembered_track_ID != current_track_ID:
-                    print("Active playback polling: DIFFERENT track ID ", current_track_ID, " than last seen " + last_remembered_track_ID + " -- will try to update user saved tracks (Liked Songs) track info_window.")
-                    update_info_window(CLI_print = True)
-                    last_remembered_track_ID = current_track_ID
+            # only do things if a booloean modified in keepalive_poll() is true; this will avoid pointlessly spamming the API for track info if there's little reason to believe it's updated:
+            if continue_keepalive_poll:
+                try:
+                    info = sp.current_user_playing_track()
+                except Exception as e:
+                    print("Error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
+                    print(e)
+                if info != None:
+                    current_track_ID = info['item']['id']
+                    if last_remembered_track_ID != current_track_ID:
+                        print("Active playback polling: DIFFERENT track ID ", current_track_ID, " than last seen " + last_remembered_track_ID + " -- will try to update user saved tracks (Liked Songs) track info_window.")
+                        update_info_window(CLI_print = True)
+                        last_remembered_track_ID = current_track_ID
+                        # reset this that another loop uses :/ complicated
+                        # global keepalive_playback_paused_poll_count
+                        # keepalive_playback_paused_poll_count = 0
+            # optional; probably was more useful in development:
+            # else:
+            #     print("Monitoring of playing track info suspended because of paused or unknown playback state over time; to resume track monitoring, unpause playback with the hotkey of this script.")
 timer = BackgroundTimer()
 timer.start()
 # END: OTHER THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
