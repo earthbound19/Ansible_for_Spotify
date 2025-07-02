@@ -411,19 +411,19 @@ def threaded_update_info_window(CLI_print = False):
         track_ID = info['item']['id']
         album = info['item']['album']['name']
         # truncate to a number of characters displayable in the info window:
-        if len(album) > 42:
-            album = album[:42] + "..."
+        if len(album) > 46:
+            album = album[:46] + " ..."
         track_name = info['item']['name']
         # truncate this also:
-        if len(track_name) > 42:
-            track_name = track_name[:42] + "..."
+        if len(track_name) > 54:
+            track_name = track_name[:54] + " ..."
         # This function expects a list, so track_ID is put into on in the call by surrounding it with []:
         is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_ID])
         # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:
         if is_in_user_saved_tracks[0]:
             if CLI_print != False:
                 print("💚🎵💛 Currently playing track ID " + track_ID + " is in user saved tracks (Liked Songs)!")
-            info_window.update_glyph("🖤\n~ " + album + "\n ~ " + track_name)
+            info_window.update_glyph("🖤\n" + album + "\n~ " + track_name)
             #  + "\n" + album_name + "\n" + track_name
         else:
             if CLI_print != False:
