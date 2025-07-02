@@ -410,7 +410,13 @@ def threaded_update_info_window(CLI_print = False):
     if info != None:
         track_ID = info['item']['id']
         album = info['item']['album']['name']
+        # truncate to a number of characters displayable in the info window:
+        if len(album) > 42:
+            album = album[:42] + "..."
         track_name = info['item']['name']
+        # truncate this also:
+        if len(track_name) > 42:
+            track_name = track_name[:42] + "..."
         # This function expects a list, so track_ID is put into on in the call by surrounding it with []:
         is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_ID])
         # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:

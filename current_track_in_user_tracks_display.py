@@ -1,3 +1,4 @@
+# implements a simple GUI to display a glyph in a window using tkinter; intended use: to also display the title and album of the current track, and the glyph depictingwhether it is saved in "Liked Songs."
 import tkinter as tk
 import os
 import time
