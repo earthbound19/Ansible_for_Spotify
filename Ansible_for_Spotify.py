@@ -402,6 +402,8 @@ def threaded_update_info_window(CLI_print = False):
         print("No glyph info_window object to update (yet?), apparently.")
     # wait a bit before calling print track info because it can take a bit before a track change happens:
     time.sleep(0.67)
+    # avoids runtime error of info variable being undeclared:
+    info = None
     try:
         info = sp.current_user_playing_track()
     except Exception as e:
@@ -868,6 +870,8 @@ class BackgroundTimer(Thread):
         while 1:
             time.sleep(wait_between_checks)
             # only do things if a booloean modified in keepalive_poll() is true; this will avoid pointlessly spamming the API for track info if there's little reason to believe it's updated:
+            # avoids runtime error of info being undeclared:
+            info = None
             if continue_keepalive_poll:
                 try:
                     info = sp.current_user_playing_track()
@@ -881,8 +885,8 @@ class BackgroundTimer(Thread):
                         update_info_window(CLI_print = True)
                         last_remembered_track_ID = current_track_ID
                         # reset this that another loop uses :/ complicated
-                        # global keepalive_playback_paused_poll_count
-                        # keepalive_playback_paused_poll_count = 0
+                        global keepalive_playback_paused_poll_count
+                        keepalive_playback_paused_poll_count = 0
             # optional; probably was more useful in development:
             # else:
             #     print("Monitoring of playing track info suspended because of paused or unknown playback state over time; to resume track monitoring, unpause playback with the hotkey of this script.")
