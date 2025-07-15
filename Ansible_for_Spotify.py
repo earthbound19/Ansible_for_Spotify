@@ -85,7 +85,7 @@ def set_option(SECTION_NAME, OPTION_NAME, OPTION_VALUE, DESCRIPTIVE_COMMENT = No
 # SETTING GLOBALS HERE:
 # function signature reference:
 # set_option_if_not(SECTION_NAME, OPTION_NAME, DESCRIPTIVE_COMMENT = None, REQUIRED = None):
-USERNAME = set_option_if_not('API_VARIABLES', 'USERNAME', 'Your spotify username, the probably long, unfriendly one, not your display username:', True)
+USERNAME = set_option_if_not('API_VARIABLES', 'USERNAME', 'Your spotify username, probably your email address associated with your user at developer.spotify.com/dashboard - or possibly a long random characters username, and not your display username:', True)
 # print("rEAD Wrote section ", SECTION_NAME, " option ", OPTION_NAME, option_value, " to .ini.")
 CLIENT_ID = set_option_if_not('API_VARIABLES', 'CLIENT_ID', 'API client ID for this application:', True)
 CLIENT_SECRET = set_option_if_not('API_VARIABLES', 'CLIENT_SECRET', 'API client secret for this application:', True)
@@ -132,7 +132,10 @@ API_SCOPE = "user-read-playback-state user-modify-playback-state user-read-curre
 	# DEPRECATED on recommendation of AI code review:
 	# AUTH_MANAGER = spotipy.oauth2.SpotifyPKCE(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, scope=API_SCOPE)
 # TRYING INSTEAD on recommendation of AI code review:
-AUTH_MANAGER = SpotifyOAuth(client_id=CLIENT_ID, client_secret=CLIENT_SECRET, redirect_uri=REDIRECT_URI, scope=API_SCOPE)
+# import sys
+# print("USERNAME IS", USERNAME)
+# sys.exit(0)
+AUTH_MANAGER = SpotifyOAuth(client_id=CLIENT_ID, client_secret=CLIENT_SECRET, redirect_uri=REDIRECT_URI, scope=API_SCOPE, username=USERNAME)
 
 # Instantiate API client.
 sp = spotipy.Spotify(auth_manager=AUTH_MANAGER)
