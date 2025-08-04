@@ -239,15 +239,15 @@ def unsave_track():
         print("~\nCould not unsave current track (could not add to Liked Songs).")
         print(e)
 
-# change repeat mode; cycles from current to next mode through track mode, context mode, and off:
+# change repeat mode; cycles from current to previous mode and wraps around; e.g. no repeat, playlist repeat, then track repeat:
 REPEAT_MODES = ['track', 'context', 'off']
 def change_repeat_mode():
     global REPEAT_MODES
     retrieved_playback_state = sp.current_playback()['repeat_state']
     current_repeat_mode_idx = REPEAT_MODES.index(retrieved_playback_state)
-    current_repeat_mode_idx += 1
-    if current_repeat_mode_idx > 2:
-        current_repeat_mode_idx = 0
+    current_repeat_mode_idx -= 1
+    if current_repeat_mode_idx < 0:
+        current_repeat_mode_idx = 2
     state_parameter = REPEAT_MODES[current_repeat_mode_idx]
     sp.repeat(state_parameter)
 
