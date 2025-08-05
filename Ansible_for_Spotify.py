@@ -31,6 +31,8 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import threading
 from threading import Thread
+import random
+import time
 
 # !----------------------------------------------------------------------
 # BEGIN INI PARSER create / read variables from ini into global variables
@@ -143,8 +145,7 @@ sp = spotipy.Spotify(auth_manager=AUTH_MANAGER)
 # hotkeys setup:
 from global_hotkeys import *
 # NOTE: for debug print uncomment the following import:
-# import json
-import time
+import json
 
 # Declare functions that key bindings will use.
 # re: https://stackoverflow.com/a/1489838 - forget managing threads, just destroy all of them with the whole program execution. DO IT.
@@ -442,7 +443,6 @@ def make_discography_playlist():
     if to_continue:
         playlist_ID = info['context']['external_urls']['spotify']
         try:
-            import random
             artists = info['item']['artists']
             print("  Artist(s):")
             for artist in artists:
@@ -635,33 +635,93 @@ def unsave_and_move_from_current_playlist_to_discards():
         print("~\nUnsave and shuffle current track to discard playlist: no playlist context; cannot remove currently playing track from any playlist. Printing the error response:")
         print(e)
 
+# DESTUCTIVE function; moves all tracks from the current playlist to another by setting to shuffle on current playlist, reading the queue, moving the seen queued items (minus the last queued) to the other playlist, changing playback to the last item seen in the queue, and repeating, until all items have shuffled to the new playlist. Then moves all those reordered items (tracks) back to the original playlist and destroys the temporary playlist.
+# TO DO? make this operate on the same playlist by building up track list in memory instead of another playlist, then remove all tracks from the current list and write the reordered track list from memory back over the current list; as in the loop and how_many_at_a_time logic in make_discography_playlist.
+# TO DO: rework this to operate this way: 1. set random shuffle mode. 2. play the current track if it's paused 3. add the currently playing song to an in-memory list 4. remove it from the current list 5. advance to next track in queue 5. repeat until there are no more tracks to play 6. paste the list of played shuffled songs back onto the current list.
+def reorder_playlist():
+    # input("! This function is intended to work with shuffle playback enabled and therefore a Spotify-determined shuffler order in the queue. WARNING: this will destroy contents of the current playlist while shuffling them to a new one. Make sure shuffle playback is on, and that there are tracks showing in the queue. Then press any key to continue..")
+    to_continue, info = print_information()
+    if to_continue:
+        playlist_ID = info['context']['external_urls']['spotify']
+        playlist_name = sp.playlist(playlist_ID, fields='name')['name']
+        # print("------playlist_ID------", playlist_ID)
+        # print("------playlist_name------", playlist_name)
+        random_playlist_name_suffix = ''.join((random.choice(' ▔▀▆▄▂▌▐█▊▎░▒▓▖▗▘▙▚▛▜▝▞▟') for i in range(4)))
+        reordered_playlist_name = playlist_name + ' (Copy, Reordered by Shuffle Queue) ' + random_playlist_name_suffix
+        # print("------reordered_playlist_name------", reordered_playlist_name)
+        print("MAKING PLAYLIST: ", reordered_playlist_name)
+        user_id = sp.me()['id']
+        global THIS_SCRIPT_FRIENDLY_NAME
+        playlist_description = 'Copy of ' + playlist_name + ', with tracks reordered by moving songs from random shuffle queue. That playlist will now be empty. If this result pleases you, perhaps copy it all back over that. Courtesy ' + THIS_SCRIPT_FRIENDLY_NAME
+        new_playlist_info = sp.user_playlist_create(user_id, reordered_playlist_name, public=True, collaborative=False, description=playlist_description)
+        new_playlist_id = new_playlist_info['external_urls']['spotify']
+        print('new_playlist_id', new_playlist_id)
+    else:
+        print("CURRENT PLAYLIST NOT FOUND?! Can't reorder tracks in playlist.")
+        return False
+    # init tracks lists to empty:
+    tracks_to_move = []
+    all_tracks_moved = []
+    print("Attempting to reorder playlist via Spotify auto-shuffle queue ordering..")
+    # TO DO: try catch blocks here against potential errors, with feedback print to user on fail
+    current_track_id = sp.queue()['currently_playing']['id']
+    # add currently playing track first:
+    tracks_to_move.append(current_track_id)
+    # get tracks from queue to add: do this now outside while loop once, then potentially repeatedly inside it until it is no more (False; empty; []):
+    queue_elements = sp.queue()['queue']
+    while queue_elements:
+        print("Checking queue to see what tracks to move to the target playlist..")
+        for element in queue_elements:
+            id = element['id']
+            tracks_to_move.append(id)
+        # astonishingly, this API doesn't return consistent counts and also shows duplicates. https://community.spotify.com/t5/Spotify-for-Developers/Get-User-Queue-Doesn-t-Return-Full-Queue/td-p/5435038
+        # mitigate that by removing any duplicates from the list while maintaining order:
+        tracks_to_move = list(dict.fromkeys(tracks_to_move))
+        # remove any tracks already moved, by using the list of those:
+        tracks_to_move = [x for x in tracks_to_move if x not in all_tracks_moved]
+        # add tracks from what we got from the queue to the set of all tracks moved:
+        all_tracks_moved.extend(tracks_to_move)
+        # OPTIONAL info write to txt file; comment out for production:
+        # f = open("debug.txt", "a")        # alternately use this to append instead of overwrite
+        # current_track_id = sp.queue()['currently_playing']['id']
+        # f = open("debug.txt", "w", encoding='utf_8')
+        # f.write("\n------------queue elements ------------------------\n")
+        # f.write(json.dumps(queue_elements, indent=4))
+        # print("------Wrote info from queue() call to debug.txt.")
+        # ADD to target playlist:
+        print("Adding any tracks from queue to target playlist..")
+        # NOTE: at this writing the API to retrieve queue items can have redundancies, and this script works around that by removing any..")
+        # that can be stupid empty, so only proceed if it's not:
+        if tracks_to_move:
+            sp.playlist_add_items(new_playlist_id, tracks_to_move)
+            print("! --- ! Removing moved tracks from source playlist..")
+            sp.playlist_remove_all_occurrences_of_items(playlist_ID, tracks_to_move)
+        else:
+            print("tracks_to_move turned up empty! :", tracks_to_move)
+        # clear that tracks list to be added to again on next loop:
+        tracks_to_move = []
+        # in case the API is ahead of the actual playlist contents, delay a little to let it catch up:
+        time.sleep(0.84)
+        # reinit this for the loop to either continue or stop (it will stop if this is empty []) :
+        queue_elements = sp.queue()['queue']
+    print("DONE creating playlist copy with track reordering by moving songs from random shuffle queue from here to there. The new playlist title is: " + reordered_playlist_name)
+
 keepalive_playback_paused_poll_count = 0
 continue_keepalive_poll = True
 # function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to cause at least the API client to forget the player. 
 def keepalive_poll():
     global keepalive_playback_paused_poll_count
     global continue_keepalive_poll
-    # NOTE: because this will lever execute if that's false, the following boolean must be set True somewhere else!
+    # NOTE: because this will never execute if that's false, the following boolean must be (and at this writing is and should always conditionally be) set True somewhere else!
     if continue_keepalive_poll:
         try:
             info = sp.current_playback()
-            # OPTIONAL info write to txt file; comment out for production:
-            # f = open("debug.txt", "a")        # alternately use this to append instead of overwrite
-            # f = open("debug.txt", "w", encoding='utf_8')
-            # f.write("\n------------------------------------\n")
-            # f.write(json.dumps(info, indent=4))
-            # f.close()
-            # print("------Wrote info from current_playback() call to debug.txt.")
             if info['is_playing'] == False or info['is_playing'] == None:
                 keepalive_playback_paused_poll_count += 1
-                # debug print only; comment out in production:
-                # print("Playback may be paused; keepalive_playback_paused_poll_count is", keepalive_playback_paused_poll_count)
-                # if we've queried this 4 times and it's paused, stop spamming the API; exit the script.
-                if keepalive_playback_paused_poll_count == 6:
+                # if we've queried this N times and it's paused, set a flag which when checked again in this block will make us stop spamming the API:
+                if keepalive_playback_paused_poll_count == 8:
                     continue_keepalive_poll = False
                     print("Playback found to be paused through 6 checks; suspending keepalive attempts until you manually resume playback with a hotkey from this script _or_ restart the script.")
-                    # print("Playback found to be paused through 6 checks; quitting script to avoid API queries. Exit code 1.")
-                    # os._exit(1)
             else:
                 # reset paused playback counter:
                 keepalive_playback_paused_poll_count = 0
@@ -673,10 +733,12 @@ def keepalive_poll():
             print("~\nError running function to attempt to retrieve playback info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
             print(e)
         # OPTIONAL: uncomment the remainder of this function to turn this script into a keepalive tool, by using a hotkey (key combination) that does nothing:
-        # if 'pyautogui' not in globals():
-        #     import pyautogui
-        # pyautogui.FAILSAFE = False
-        # pyautogui.hotkey('altleft', 'pageup')     # a keypress instead would look like: pyautogui.typewrite(['fn', '\r'])
+        if 'pyautogui' not in globals():
+            import pyautogui
+        pyautogui.FAILSAFE = False
+        pyautogui.hotkey('altleft', '~')
+        # pyautogui.hotkey('altleft', 'pageup')     # tried this and it messed with an IDE's navigation
+        # a keypress instead would look like: pyautogui.typewrite(['fn', '\r'])
 
 # START BOOKMARK FUNCTIONS REGION
 # NOTE THAT LOAD AND SAVE BOOKMARK HOTKEYS are hard-coded in one of these functions (see below).
@@ -831,6 +893,7 @@ bindings = [
     ["control + alt + shift + m", None, shuffle_current_track_to_playlist_1, False, None, None],
     ["control + alt + shift + c", None, make_discography_playlist, False, None, None],
     ["control + alt + shift + i", None, print_information, True, None, None],
+    ["control + alt + shift + o", None, reorder_playlist, True, None, None],
     ["control + alt + shift + q", None, exit_program, True, None, None],
 ]
 
