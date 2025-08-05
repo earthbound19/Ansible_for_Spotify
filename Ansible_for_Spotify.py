@@ -410,7 +410,7 @@ def threaded_update_info_window(CLI_print = False):
     try:
         info = sp.current_user_playing_track()
     except Exception as e:
-        print("Error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
+        print("In threaded_update_info_window call, error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
         print(e)
     if info != None:
         track_ID = info['item']['id']
@@ -879,7 +879,7 @@ class BackgroundTimer(Thread):
                 try:
                     info = sp.current_user_playing_track()
                 except Exception as e:
-                    print("Error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
+                    print("In repeat timer query of playing track check, controlled by boolean continue_keepalive_poll, error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
                     print(e)
                 if info != None:
                     current_track_ID = info['item']['id']
