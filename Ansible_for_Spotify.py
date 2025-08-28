@@ -642,11 +642,11 @@ def keepalive_poll():
     global continue_keepalive_poll
 
     # OPTIONAL: uncomment the remainder of the next four lines to turn this script into a keepalive tool, by using a hotkey (key combination) that does nothing. If you uncomment these lines, nthis will always be run when this function is called:
-    # if 'pyautogui' not in globals():
-    #    import pyautogui
-    # pyautogui.FAILSAFE = False
-    pyautogui.hotkey('altleft', 'shift', "`")        # a keypress instead would look like: pyautogui.typewrite(['fn', '\r']). DEPRECATED: combo with pageup which led to some applications seeing or using that keystroke as if by itself.
-    # print("pressed keepalive key combo.")
+    #if 'pyautogui' not in globals():
+    #   import pyautogui
+    #pyautogui.FAILSAFE = False
+    #pyautogui.hotkey('altleft', 'shift', "`")        # a keypress instead would look like: pyautogui.typewrite(['fn', '\r']). DEPRECATED: combo with pageup which led to some applications seeing or using that keystroke as if by itself.
+    #print("pressed keepalive key combo.")
 
     # NOTE: because this will never execute if that's false, the following boolean must be set True somewhere else!
     if continue_keepalive_poll:
