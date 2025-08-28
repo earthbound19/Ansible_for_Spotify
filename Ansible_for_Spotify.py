@@ -565,25 +565,24 @@ def add_current_track_to_playlist_1():
         print("Retrieving all tracks in target playlist to determine whether track proposed to add is already in playlist . .")
         result = sp.playlist_tracks(PLAYLIST_ID_1, fields=None, limit=100, offset=0, market=None)
         items = result['items']
-    while True:
-        for item in items:
-            track_from_target_list = item['track']['external_urls']['spotify']
-            if track_from_target_list == track_id_to_add:
-                print('track_from_target_list', track_from_target_list, " == track_id_to_add ", track_id_to_add)
-                print("That's already in the target playlist! Not adding.")
-                return False
-        if result['next']:
-            result = sp.next(result)
-            items = result['items']
-            # without this continue statement the program would go on to the code below to add the track, perhaps erroneously :)
-            continue
-        # if the check for whether it's already in the list never returned False, we're good to add the track, and this code will do so:
-        # this function call adds to the end of a playlist by default, and we're doing that:
-        sp.playlist_add_items(PLAYLIST_ID_1, list_of_track_IDs)
-        print("ADDED track to playlist ID", PLAYLIST_ID_1)
-        print_playlist_1_info()
-        return True
-    print("FLOW SHOULD NOT SHOW THIS. BLRO")
+        while True:
+            for item in items:
+                track_from_target_list = item['track']['external_urls']['spotify']
+                if track_from_target_list == track_id_to_add:
+                    print('track_from_target_list', track_from_target_list, " == track_id_to_add ", track_id_to_add)
+                    print("That's already in the target playlist! Not adding.")
+                    return False
+            if result['next']:
+                result = sp.next(result)
+                items = result['items']
+                # without this continue statement the program would go on to the code below to add the track, perhaps erroneously :)
+                continue
+            # if the check for whether it's already in the list never returned False, we're good to add the track, and this code will do so:
+            # this function call adds to the end of a playlist by default, and we're doing that:
+            sp.playlist_add_items(PLAYLIST_ID_1, list_of_track_IDs)
+            print("ADDED track to playlist ID", PLAYLIST_ID_1)
+            print_playlist_1_info()
+            return True
 
 # function: remove the current song from the current playlist
 def remove_current_track_from_current_playlist():
@@ -641,7 +640,15 @@ continue_keepalive_poll = True
 def keepalive_poll():
     global keepalive_playback_paused_poll_count
     global continue_keepalive_poll
-    # NOTE: because this will lever execute if that's false, the following boolean must be set True somewhere else!
+
+    # OPTIONAL: uncomment the remainder of the next four lines to turn this script into a keepalive tool, by using a hotkey (key combination) that does nothing. If you uncomment these lines, nthis will always be run when this function is called:
+    # if 'pyautogui' not in globals():
+    #    import pyautogui
+    # pyautogui.FAILSAFE = False
+    pyautogui.hotkey('altleft', 'shift', "`")        # a keypress instead would look like: pyautogui.typewrite(['fn', '\r']). DEPRECATED: combo with pageup which led to some applications seeing or using that keystroke as if by itself.
+    # print("pressed keepalive key combo.")
+
+    # NOTE: because this will never execute if that's false, the following boolean must be set True somewhere else!
     if continue_keepalive_poll:
         try:
             info = sp.current_playback()
@@ -672,11 +679,6 @@ def keepalive_poll():
         except Exception as e:
             print("~\nError running function to attempt to retrieve playback info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
             print(e)
-        # OPTIONAL: uncomment the remainder of this function to turn this script into a keepalive tool, by using a hotkey (key combination) that does nothing:
-        # if 'pyautogui' not in globals():
-        #     import pyautogui
-        # pyautogui.FAILSAFE = False
-        # pyautogui.hotkey('altleft', 'pageup')     # a keypress instead would look like: pyautogui.typewrite(['fn', '\r'])
 
 # START BOOKMARK FUNCTIONS REGION
 # NOTE THAT LOAD AND SAVE BOOKMARK HOTKEYS are hard-coded in one of these functions (see below).
