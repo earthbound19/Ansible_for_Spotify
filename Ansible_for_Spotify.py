@@ -151,6 +151,17 @@ import time
 def exit_program():
     os._exit(3)
 
+# Helper function to extract Spotify ID from URI or URL
+def extract_spotify_id(uri_or_url):
+    # Handle URLs like https://open.spotify.com/track/123abc
+    if 'spotify.com' in uri_or_url:
+        return uri_or_url.split('/')[-1].split('?')[0]
+    # Handle URIs like spotify:track:123abc
+    if uri_or_url.startswith('spotify:'):
+        return uri_or_url.split(':')[-1]
+    # Assume it's already an ID
+    return uri_or_url
+
 # Function to find an active device. Returns the first active device's ID or None if no devices are found.
 def find_active_device():
     try:
@@ -215,10 +226,11 @@ def save_track():
     info = sp.current_user_playing_track()
     try:
         playlist_ID = info['context']['external_urls']['spotify']
-        track_ID = info['item']['external_urls']['spotify']
-        list_of_track_IDs = [track_ID]
-        sp.current_user_saved_tracks_add(list_of_track_IDs)
-        print("Saved currently playing track", list_of_track_IDs, "to Liked Songs.")
+        track_URL = info['item']['external_urls']['spotify']
+        track_id = extract_spotify_id(track_URL)
+        list_of_track_ids = [track_id]
+        sp.current_user_saved_tracks_add(list_of_track_ids)
+        print("Saved currently playing track", list_of_track_ids, "to Liked Songs.")
         print("Attempted confirm:")
         update_info_window(CLI_print = True)
     except Exception as e:
@@ -229,10 +241,11 @@ def unsave_track():
     info = sp.current_user_playing_track()
     try:
         playlist_ID = info['context']['external_urls']['spotify']
-        track_ID = info['item']['external_urls']['spotify']
-        list_of_track_IDs = [track_ID]
-        sp.current_user_saved_tracks_delete(list_of_track_IDs)
-        print("Remove currently playing track", list_of_track_IDs, "from Liked Songs.")
+        track_URL = info['item']['external_urls']['spotify']
+        track_id = extract_spotify_id(track_URL)
+        list_of_track_ids = [track_id]
+        sp.current_user_saved_tracks_delete(list_of_track_ids)
+        print("Remove currently playing track", list_of_track_ids, "from Liked Songs.")
         print("Attempted confirmation:")
         update_info_window(CLI_print = True)
     except Exception as e:
@@ -413,7 +426,7 @@ def threaded_update_info_window(CLI_print = False):
         print("In threaded_update_info_window call, error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
         print(e)
     if info != None:
-        track_ID = info['item']['id']
+        track_id = info['item']['id']
         album = info['item']['album']['name']
         # truncate to a number of characters displayable in the info window:
         if len(album) > 46:
@@ -422,17 +435,17 @@ def threaded_update_info_window(CLI_print = False):
         # truncate this also:
         if len(track_name) > 54:
             track_name = track_name[:54] + " ..."
-        # This function expects a list, so track_ID is put into on in the call by surrounding it with []:
-        is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_ID])
+        # This function expects a list, so track_id is put into on in the call by surrounding it with []:
+        is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_id])
         # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:
         if is_in_user_saved_tracks[0]:
             if CLI_print != False:
-                print("💚🎵💛 Currently playing track ID " + track_ID + " is in user saved tracks (Liked Songs)!")
+                print("💚🎵💛 Currently playing track ID " + track_id + " is in user saved tracks (Liked Songs)!")
             info_window.update_glyph("🖤\n" + album + "\n~ " + track_name)
             #  + "\n" + album_name + "\n" + track_name
         else:
             if CLI_print != False:
-                print("🖤 Currently playing track ID " + track_ID + " is NOT in user saved tracks (Liked Songs).")
+                print("🖤 Currently playing track ID " + track_id + " is NOT in user saved tracks (Liked Songs).")
             info_window.update_glyph("🤍\n~ " + album + "\n ~" + track_name)
 
 # make discography playlist from the artist of the currently playing song.
@@ -497,7 +510,12 @@ def make_discography_playlist():
                     else:
                         # this function call adds to the end of a playlist by default, and we're doing that:
                         try:
-                            sp.playlist_add_items(new_playlist_id, tracks_to_add)
+                            # Convert URLs to URIs for the API
+                            track_uris = []
+                            for track_url in tracks_to_add:
+                                track_id = extract_spotify_id(track_url)
+                                track_uris.append(f"spotify:track:{track_id}")
+                            sp.playlist_add_items(new_playlist_id, track_uris)
                         except Exception as e:
                             print("WARNING: error attempting to add tracks to playlist ", new_playlist_id)
                             print(e)
@@ -555,21 +573,27 @@ def add_current_track_to_playlist_1():
     else:
         # get currently playing track:
         info = sp.current_user_playing_track()
-        track_id_to_add = info['item']['external_urls']['spotify']
-        list_of_track_IDs = [track_id_to_add]
+        track_url = info['item']['external_urls']['spotify']
+        track_id = extract_spotify_id(track_url)
+        track_uri = f"spotify:track:{track_id}"
+        
+        # Get playlist ID from URI if needed
+        playlist_id = extract_spotify_id(PLAYLIST_ID_1)
+
         print_current_track_information()
-        # get info of target playlist to parse:
-        # prior, deprecated track retrieve method; seems I couldn't paginate with it though:
-        # items = sp.playlist(PLAYLIST_ID_1)['tracks']['items']
-        # last track of prev dev ref.: https://open.spotify.com/track/7tfZ04mgD2fNU2dQ1SrMzG
+        
         print("Retrieving all tracks in target playlist to determine whether track proposed to add is already in playlist . .")
-        result = sp.playlist_tracks(PLAYLIST_ID_1, fields=None, limit=100, offset=0, market=None)
+        # DEPRECATED CALL:
+        # result = sp.playlist_tracks(PLAYLIST_ID_1, fields=None, limit=100, offset=0, market=None)
+        # USE playlist_items INSTEAD of playlist_tracks (updated endpoint)
+        result = sp.playlist_items(playlist_id, fields=None, limit=100, offset=0, market=None)
         items = result['items']
         while True:
             for item in items:
-                track_from_target_list = item['track']['external_urls']['spotify']
-                if track_from_target_list == track_id_to_add:
-                    print('track_from_target_list', track_from_target_list, " == track_id_to_add ", track_id_to_add)
+                # The item structure changed: now item['track']['uri'] instead of item['track']['external_urls']['spotify']
+                track_uri_from_target_list = item['track']['uri']
+                if track_uri_from_target_list == track_uri:
+                    print('track_uri_from_target_list', track_uri_from_target_list, " == track_uri ", track_uri)
                     print("That's already in the target playlist! Not adding.")
                     return False
             if result['next']:
@@ -579,8 +603,9 @@ def add_current_track_to_playlist_1():
                 continue
             # if the check for whether it's already in the list never returned False, we're good to add the track, and this code will do so:
             # this function call adds to the end of a playlist by default, and we're doing that:
-            sp.playlist_add_items(PLAYLIST_ID_1, list_of_track_IDs)
-            print("ADDED track to playlist ID", PLAYLIST_ID_1)
+            # Now using track_uri instead of list_of_track_ids
+            sp.playlist_add_items(playlist_id, [track_uri])
+            print("ADDED track to playlist ID", playlist_id)
             print_playlist_1_info()
             return True
 
@@ -588,16 +613,16 @@ def add_current_track_to_playlist_1():
 def remove_current_track_from_current_playlist():
     info = sp.current_user_playing_track()
     try:
-        playlist_ID = info['context']['external_urls']['spotify']
-        track_ID = info['item']['external_urls']['spotify']
-        list_of_track_IDs = [track_ID]
+        playlist_URL = info['context']['external_urls']['spotify']
+        playlist_id = extract_spotify_id(playlist_URL)
+        track_url = info['item']['external_urls']['spotify']
+        track_id = extract_spotify_id(track_url)
+        track_uri = f"spotify:track:{track_id}"
         print("~\nIn a playlist context; will remove currently playing track from the current playlist.")
-                # , and play the next song in the playlist
-        print("Current playlist ID:", playlist_ID)
-        print("track ID:", track_ID)
-        sp.playlist_remove_all_occurrences_of_items(playlist_ID, list_of_track_IDs)
-        # I've gone back and forth on wanting the following; now I don't :p
-        # sp.next_track()
+        print("Current playlist ID:", playlist_id)
+        print("track ID:", track_id)
+        # Updated to use playlist_remove_all_occurrences_of_items with track_uri
+        sp.playlist_remove_all_occurrences_of_items(playlist_id, [track_uri])
     except Exception as e:
         print("~\nRemove current track from current playlist: cannot; no playlist context.")
         print(e)
@@ -611,21 +636,25 @@ def shuffle_current_track_to_playlist_1():
             print("~\nConditions said don't add to playlist 1; didn't move anything.")
     except Exception as e:
         print("~\nFailure shuffling current track to playlist 1 from current list.")
-        print(e)
+        print(f"Error details: {e}")
 
 # Function: if in a playlist context, add currently playing track to discards playlist, remove it from currently playing playlist and user library (liked songs), and play the next song in the playlist.
 def unsave_and_move_from_current_playlist_to_discards():
     info = sp.current_user_playing_track()
     try:
-        playlist_ID = info['context']['external_urls']['spotify']
+        playlist_URL = info['context']['external_urls']['spotify']
+        playlist_id = extract_spotify_id(playlist_URL)
         print("~\nDiscards playlist ID:", DISCARDS_PLAYLIST_ID)
-        print("Current playlist ID:", playlist_ID)
+        print("Current playlist ID:", playlist_id)
         print_current_track_information()
-        track_ID = info['item']['external_urls']['spotify']
-        list_of_track_IDs = [track_ID]
-        sp.playlist_add_items(DISCARDS_PLAYLIST_ID, list_of_track_IDs)
-        sp.current_user_saved_tracks_delete(list_of_track_IDs)
-        sp.playlist_remove_all_occurrences_of_items(playlist_ID, list_of_track_IDs)
+        track_url = info['item']['external_urls']['spotify']
+        track_id = extract_spotify_id(track_url)
+        track_uri = f"spotify:track:{track_id}"
+        discards_playlist_id = extract_spotify_id(DISCARDS_PLAYLIST_ID)
+        
+        sp.playlist_add_items(discards_playlist_id, [track_uri])
+        sp.current_user_saved_tracks_delete([track_id])
+        sp.playlist_remove_all_occurrences_of_items(playlist_id, [track_uri])
         print("Added current track to discards playlist, removed it from current playlist and from liked songs, and will play the next song in the playlist.")
         print("Attempted confirm:")
         update_info_window(CLI_print = True)
@@ -708,7 +737,9 @@ def save_bookmark(bookmark_key):
         playlist_name = "None"
         if playlist_id and "playlist" in playlist_id:
             try:
-                playlist_info = sp.playlist(playlist_id.split(":")[-1], fields="name")
+                # Extract playlist ID from URI for the API call
+                playlist_id_for_api = extract_spotify_id(playlist_id)
+                playlist_info = sp.playlist(playlist_id_for_api, fields="name")
                 playlist_name = playlist_info.get('name', 'Unknown Playlist')
             except:
                 pass
@@ -866,11 +897,11 @@ f(f_stop)
 # re https://stackoverflow.com/a/2223191 - another answer with the above linked, which seems like a far simpler way to implement a repeated threaded task? And maybe would obviate other code my above timer calls needing threading?
 # TO DO: ^ EXAMINE THAT and re-implement it if it is simpler
 # POLL the current playing track ID every N seconds (wait_between_checks), and update the info window glyph if it has changed, to keep display of whether the current playing track is in the user saved tracks (Liked Songs) pretty current:
-last_remembered_track_ID = ''
+last_remembered_track_id = ''
 wait_between_checks = 6.5
 class BackgroundTimer(Thread):
     def run(self):
-        global last_remembered_track_ID
+        global last_remembered_track_id
         global continue_keepalive_poll
         while 1:
             time.sleep(wait_between_checks)
@@ -884,11 +915,11 @@ class BackgroundTimer(Thread):
                     print("In repeat timer query of playing track check, controlled by boolean continue_keepalive_poll, error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
                     print(e)
                 if info != None:
-                    current_track_ID = info['item']['id']
-                    if last_remembered_track_ID != current_track_ID:
-                        print("Active playback polling: DIFFERENT track ID ", current_track_ID, " than last seen " + last_remembered_track_ID + " -- will try to update user saved tracks (Liked Songs) track info_window.")
+                    current_track_id = info['item']['id']
+                    if last_remembered_track_id != current_track_id:
+                        print("Active playback polling: DIFFERENT track ID ", current_track_id, " than last seen " + last_remembered_track_id + " -- will try to update user saved tracks (Liked Songs) track info_window.")
                         update_info_window(CLI_print = True)
-                        last_remembered_track_ID = current_track_ID
+                        last_remembered_track_id = current_track_id
                         # reset this that another loop uses :/ complicated
                         global keepalive_playback_paused_poll_count
                         keepalive_playback_paused_poll_count = 0
