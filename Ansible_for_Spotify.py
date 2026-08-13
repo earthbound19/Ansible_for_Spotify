@@ -6,7 +6,13 @@
 # - Python and the Spotipy library
 # Install spotipy via:
 #    pip install spotipy --upgrade
-# OR TRY:
+# - A web host you control, to upload /ansible-web-auth-php/index.php at
+#  - set the permissions for the containing folder to 755
+#  - set the permissions for index.php to 644
+# - set variables in Ansible_for_Spotify.ini such that they include the path to that PHP page at your host, e.g.:
+# redirect_uri = https://earthbound.io/ansible-spotify/
+#
+# Alternate install method for Spotipy:
 #    pip install git+https://github.com/plamere/spotipy.git@master
 # install python global hotkeys via:
 #    pip install global-hotkeys -U
@@ -15,7 +21,31 @@
 # USAGE
 # Install dependencies (See DEPENDENCIES), and run this script with Python, like so, from the directory it is in:
 #    python Ansible_for_Spotify.py
-# At this writing, 
+# On first run it will interactively prompt for needed INI values (see below for INI config), then open an authentication workflow.
+
+# CONFIGURATION - Ansible_for_Spotify.ini
+# The script creates Ansible_for_Spotify.ini on first run if it doesn't exist.
+# You'll be prompted interactively for required values.
+#
+# Required fields (prompted on first run):
+#   [API_VARIABLES]
+#   USERNAME        - Your Spotify account email or username
+#   CLIENT_ID       - From Spotify Developer Dashboard
+#   CLIENT_SECRET   - From Spotify Developer Dashboard  
+#   REDIRECT_URI    - Your web host callback URL (e.g., https://earthbound.io/ansible-spotify/)
+#
+#   [USER_VARIABLES]
+#   DISCARDS_PLAYLIST_ID - Playlist ID for "recycled" tracks (e.g., spotify:playlist:xxx)
+#   BACK_SEEK_MS         - Milliseconds to skip backward (e.g., 5000 = 5 seconds)
+#   FORWARD_SEEK_MS      - Milliseconds to skip forward (e.g., 5000 = 5 seconds)
+#
+# Optional field (can be set manually or via Ctrl+Alt+Shift+1 hotkey):
+#   [USER_VARIABLES]
+#   PLAYLIST_ID_1   - Target playlist for move/shuffle operations
+#
+# Auto-generated bookmark sections (10 slots, BOOKMARK 0 through BOOKMARK 9):
+#   Each stores playlist_id, playlist_name, track_id, position_ms, and key
+
 
 # CODE
 # TO DO
