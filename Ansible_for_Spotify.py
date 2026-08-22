@@ -55,12 +55,15 @@
 # - things in the readme
 
 THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
+SCRIPT_VERSION_STRING = 4.2.42
 
 import os
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import threading
 from threading import Thread
+
+import tent_pole_sort_for_ansible_for_spotify as tent_pole_sort
 
 # !----------------------------------------------------------------------
 # BEGIN INI PARSER create / read variables from ini into global variables
@@ -824,6 +827,117 @@ def load_bookmark(bookmark_key):
         print(f"\tPossible error loading bookmark.")
         print(e)
 
+
+# ============================================
+# TENT-POLE REORDERING FUNCTIONS
+# ============================================
+
+def get_all_playlist_tracks(playlist_id):
+    """
+    Fetch all tracks from a playlist with pagination.
+    Returns a list of track items in their current order.
+    """
+    all_tracks = []
+    try:
+        # First page
+        results = sp.playlist_items(
+            playlist_id, 
+            fields='items(track(uri)),next,total',
+            limit=100
+        )
+        all_tracks.extend(results['items'])
+        
+        # Subsequent pages
+        while results['next']:
+            results = sp.next(results)
+            all_tracks.extend(results['items'])
+            # Optional: print progress for very large playlists
+            # print(f"Fetched {len(all_tracks)} tracks so far...")
+            
+        return all_tracks
+    except Exception as e:
+        print(f"Error fetching playlist tracks: {e}")
+        return []
+
+def build_reorder_mapping(original_uris, new_order_uris):
+    """
+    Build a mapping of old positions to new positions.
+    Returns a dict: {old_position: new_position}
+    """
+    # Create a map from URI to its new position
+    uri_to_new_pos = {uri: idx for idx, uri in enumerate(new_order_uris)}
+    
+    # Build the old->new position mapping
+    position_map = {}
+    for old_pos, uri in enumerate(original_uris):
+        if uri in uri_to_new_pos:
+            new_pos = uri_to_new_pos[uri]
+            if old_pos != new_pos:  # Only track positions that actually change
+                position_map[old_pos] = new_pos
+    
+    return position_map
+
+def reorder_playlist_in_chunks(playlist_id, position_map, total_tracks):
+    """
+    Reorder a playlist using the Spotify reorder API.
+    
+    The API expects:
+    - range_start: start index of the block to move
+    - range_length: how many items to move (default 1)
+    - insert_before: where to insert the moved block
+    
+    To avoid index shifting issues, we process moves in descending order
+    of new position (moving from end to start).
+    """
+    if not position_map:
+        print("No reordering needed - positions unchanged.")
+        return True
+    
+    # Sort moves by new position (descending) to avoid index shifts
+    sorted_moves = sorted(position_map.items(), key=lambda x: x[1], reverse=True)
+    
+    # Process moves in chunks of 100 (API limit for batch operations)
+    # But since we're moving individual items, we can process them one by one
+    # or in small batches. Let's do up to 100 at a time.
+    
+    success_count = 0
+    error_count = 0
+    
+    for old_pos, new_pos in sorted_moves:
+        try:
+            # For moving an item to the end, insert_before should be total_tracks
+            if new_pos >= total_tracks:
+                insert_before = total_tracks
+            else:
+                insert_before = new_pos
+                
+            # If we're moving to a position after the current one,
+            # we need to adjust because removing the item shifts indices.
+            # However, since we process in descending new_pos order,
+            # this handles itself correctly.
+            
+            # Spotify API call: reorder a single item
+            sp.playlist_reorder_items(
+                playlist_id,
+                range_start=old_pos,
+                range_length=1,
+                insert_before=insert_before
+            )
+            success_count += 1
+            
+            # Optional: print progress for very large reorders
+            # if success_count % 10 == 0:
+            #     print(f"Reordered {success_count} items...")
+                
+        except Exception as e:
+            error_count += 1
+            print(f"Error moving item from position {old_pos} to {new_pos}: {e}")
+            # Continue with other items even if one fails
+    
+    print(f"Reordering complete: {success_count} items moved, {error_count} errors.")
+    return error_count == 0
+
+
 # LOAD AND SAVE BOOKMARK HOTKEYS HARDCODED HERE:
 # Function: Dynamically generate and register bookmark hotkeys from the .ini file
 def register_bookmark_hotkeys_from_ini():
@@ -853,9 +967,148 @@ def register_bookmark_hotkeys_from_ini():
             
     # register_hotkeys(dynamic_bindings)
     # print("Dynamic bookmark hotkeys registered.")
-
 # END BOOKMARK FUNCTIONS REGION
 
+# tent-pole reordering
+def reorder_playlist_by_tent_pole():
+    """
+    Interactive CLI function that:
+    1. Asks user to pause playback manually
+    2. Asks for playlist URL/ID
+    3. Asks for N (number of tent poles)
+    4. Fetches all tracks from the playlist
+    5. Applies tent-pole sorting
+    6. Confirms changes with user
+    7. Reorders the playlist in-place
+    """
+    print("\n" + "="*50)
+    print("TENT-POLE REORDERING")
+    print("="*50)
+    
+    try:
+        # Step 1: Ask user to pause playback
+        print("\nIMPORTANT: Please manually pause playback before continuing.")
+        print("(This prevents playback jumps/interruptions during reordering)")
+        input("Press ENTER when playback is paused...")
+        
+        # Step 2: Get playlist ID from user
+        print("\nEnter the playlist to reorder:")
+        print("(You can paste a Spotify URL, URI, or just the ID)")
+        playlist_input = input("Playlist: ").strip()
+        
+        if not playlist_input:
+            print("No playlist entered. Operation cancelled.")
+            return
+        
+        playlist_id = extract_spotify_id(playlist_input)
+        print(f"Using playlist ID: {playlist_id}")
+        
+        # Verify playlist exists and get its name
+        try:
+            playlist_info = sp.playlist(playlist_id, fields="name,owner.display_name")
+            playlist_name = playlist_info.get('name', 'Unknown Playlist')
+            owner_name = playlist_info.get('owner', {}).get('display_name', 'Unknown Owner')
+            print(f"Playlist: '{playlist_name}' by {owner_name}")
+        except Exception as e:
+            print(f"Could not verify playlist: {e}")
+            return
+        
+        # Step 3: Get N
+        n_input = input("\nNumber of tent poles (default 5, min 2): ").strip()
+        N = int(n_input) if n_input else 5
+        
+        if N < 2:
+            print("N must be at least 2. Operation cancelled.")
+            return
+        
+        print(f"Using N={N} tent poles")
+        
+        # Step 4: Fetch all tracks from playlist
+        print(f"\nFetching tracks from playlist...")
+        track_items = get_all_playlist_tracks(playlist_id)
+        
+        if not track_items:
+            print("No tracks found in playlist.")
+            return
+        
+        # Filter out None or invalid tracks
+        valid_tracks = [t for t in track_items if t and t.get('track')]
+        if not valid_tracks:
+            print("No valid tracks found in playlist.")
+            return
+        
+        track_count = len(valid_tracks)
+        print(f"Found {track_count} tracks.")
+        
+        # Check if N is greater than track count
+        if N > track_count:
+            print(f"Warning: N={N} is greater than track count ({track_count}).")
+            print("Proceeding with N = track count.")
+            N = track_count
+        
+        # Step 5: Get track URIs in current order
+        track_uris = [t['track']['uri'] for t in valid_tracks]
+        # Also get track names for debugging (optional)
+        # track_names = [t['track']['name'] for t in valid_tracks]
+        
+        # Step 6: Apply tent-pole sorting
+        print("\nApplying tent-pole sorting algorithm...")
+        print("(This may take a moment for large playlists)")
+        sorted_uris = tent_pole_sort.sort_tent_pole(track_uris, N)
+        
+        # Step 7: Show summary and confirm
+        print(f"\nSorting complete. Playlist will be reordered from:")
+        print(f"Original: {track_count} tracks")
+        print(f"To: {len(sorted_uris)} tracks")
+        print(f"Using N={N} tent poles")
+        
+        # Count how many tracks would move
+        position_map = build_reorder_mapping(track_uris, sorted_uris)
+        moves_needed = len(position_map)
+        print(f"{moves_needed} tracks will be moved")
+        
+        if moves_needed == 0:
+            print("No changes needed - playlist is already in tent-pole order.")
+            return
+        
+        # Ask for confirmation
+        print("\nThis will modify the playlist in-place.")
+        print("(Track metadata like 'added on' dates will be preserved)")
+        confirm = input("Proceed with reordering? (y/N): ").strip().lower()
+        
+        if confirm != 'y' and confirm != 'yes':
+            print("Operation cancelled by user.")
+            return
+        
+        # Step 8: Perform the reordering
+        print(f"\nReordering playlist...")
+        print(f"(Processing {moves_needed} track moves...)")
+        
+        # For very large playlists, we need to track current positions
+        # The simple approach: process in descending new position order
+        success = reorder_playlist_in_chunks(playlist_id, position_map, track_count)
+        
+        if success:
+            print(f"\nPlaylist reordered successfully with {N} tent poles!")
+            print(f"Playlist: '{playlist_name}'")
+            print(f"Tracks: {track_count} tracks reordered")
+            update_info_window(CLI_print=True)
+        else:
+            print("\nReordering completed with some errors. Please check the logs above.")
+        
+    except ValueError as e:
+        print(f"Invalid input: {e}")
+        print("Operation cancelled.")
+    except KeyboardInterrupt:
+        print("\n\nOperation interrupted by user (Ctrl+C).")
+        print("Playlist may be partially reordered.")
+    except Exception as e:
+        print(f"\nUnexpected error reordering playlist:")
+        print(f"{e}")
+        # Log full error for debugging
+        import traceback
+        traceback.print_exc()
+        print("\nOperation failed. Playlist may be in an inconsistent state.")
 
 # TO USE??? recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs) re recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs)
 
@@ -895,6 +1148,7 @@ bindings = [
     ["control + alt + shift + c", None, make_discography_playlist, False, None, None],
     ["control + alt + shift + i", None, print_information, True, None, None],
     ["control + alt + shift + q", None, exit_program, True, None, None],
+    ["control + alt + shift + t", None, reorder_playlist_by_tent_pole, False, None, None],  # t for tent-pole
 ]
 
 # Register all of our keybindings
