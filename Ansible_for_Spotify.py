@@ -55,7 +55,7 @@
 # - things in the readme
 
 THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
-SCRIPT_VERSION_STRING = 4.2.42
+SCRIPT_VERSION_STRING = "4.4.0"
 
 import os
 import spotipy
@@ -119,13 +119,12 @@ def set_option(SECTION_NAME, OPTION_NAME, OPTION_VALUE, DESCRIPTIVE_COMMENT = No
 # function signature reference:
 # set_option_if_not(SECTION_NAME, OPTION_NAME, DESCRIPTIVE_COMMENT = None, REQUIRED = None):
 USERNAME = set_option_if_not('API_VARIABLES', 'USERNAME', 'Your spotify username, probably your email address associated with your user at developer.spotify.com/dashboard - or possibly a long random characters username, and not your display username:', True)
-# print("rEAD Wrote section ", SECTION_NAME, " option ", OPTION_NAME, option_value, " to .ini.")
 CLIENT_ID = set_option_if_not('API_VARIABLES', 'CLIENT_ID', 'API client ID for this application:', True)
 CLIENT_SECRET = set_option_if_not('API_VARIABLES', 'CLIENT_SECRET', 'API client secret for this application:', True)
 REDIRECT_URI = set_option_if_not('API_VARIABLES', 'REDIRECT_URI', 'URL to open on setup of API authentication:', True)
 # PLAYLIST ID that tracks which are removed from any currently playing playlist are shuffled to; a recycle bin of sorts:
 DISCARDS_PLAYLIST_ID = set_option_if_not('USER_VARIABLES', 'DISCARDS_PLAYLIST_ID', 'Playlist for tracks removed from playists and liked songs; effectively a recycle bin:', True)
-# REDIRECT_URI = set_option_if_not('API_VARIABLES', 'REDIRECT_URI', 'URL to open on setup of API authentication:')
+REDIRECT_URI = set_option_if_not('API_VARIABLES', 'REDIRECT_URI', 'URL to open on setup of API authentication:')
 BACK_SEEK_MS = int(set_option_if_not('USER_VARIABLES', 'BACK_SEEK_MS', 'On skip back, skip this many ms e.g. 5000ms = 5 seconds:', True))
 # if that's positive, change it to negative (for intended use of plus a negative number in seeking back):
 if (BACK_SEEK_MS > 0):
@@ -137,7 +136,6 @@ PLAYLIST_ID_1 = set_option_if_not('USER_VARIABLES', 'PLAYLIST_ID_1', 'Optional p
 # !--------------------------------------------------------------------
 
 # SET DEFAULT / BLANK INI BOOKMARKS IF THERE ARE NONE
-# TO DO: clearer messages about whether / what it initialized? Because it says it did even if it didn't, I think.
 def initialize_bookmarks_in_ini():
     # Create bookmark sections if they don't exist
     for i in range(0, 10):  # Let's assume you want to create 10 bookmarks
@@ -159,15 +157,6 @@ initialize_bookmarks_in_ini()
 
 API_SCOPE = "user-read-playback-state user-modify-playback-state user-read-currently-playing app-remote-control app-remote-control streaming playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-read-playback-position user-library-modify user-library-read"
 
-
-# BEGIN SET UP API/SPOTIFY CLIENT SpotifyOAuth
-# can also be spotipy.oauth2.SpotifyOAuth:
-	# DEPRECATED on recommendation of AI code review:
-	# AUTH_MANAGER = spotipy.oauth2.SpotifyPKCE(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, scope=API_SCOPE)
-# TRYING INSTEAD on recommendation of AI code review:
-# import sys
-# print("USERNAME IS", USERNAME)
-# sys.exit(0)
 AUTH_MANAGER = SpotifyOAuth(client_id=CLIENT_ID, client_secret=CLIENT_SECRET, redirect_uri=REDIRECT_URI, scope=API_SCOPE, username=USERNAME)
 
 # Instantiate API client.
@@ -175,12 +164,15 @@ sp = spotipy.Spotify(auth_manager=AUTH_MANAGER)
 
 # hotkeys setup:
 from global_hotkeys import *
-# NOTE: for debug print uncomment the following import:
-# import json
 import time
 
+# Declare global control flags for polling & exception suppression
+continue_keepalive_poll = True
+keepalive_playback_paused_poll_count = 0
+track_info_exception_raised = False
+
 # Declare functions that key bindings will use.
-# re: https://stackoverflow.com/a/1489838 - forget managing threads, just destroy all of them with the whole program execution. DO IT.
+# re https://stackoverflow.com/a/1489838 : forget managing threads, just destroy all of them with the whole program execution. DO IT.
 def exit_program():
     os._exit(3)
 
@@ -220,6 +212,7 @@ def switch_to_device(device_id):
 
 # Function: pause or start playback, using other functions to find and switch to an active player if no player found:
 def pause_or_start_playback():
+
     try:
         playback = sp.current_playback()
         if not playback:  # If there's no playback context, find and switch to an active device
@@ -235,30 +228,45 @@ def pause_or_start_playback():
             sp.pause_playback()
         else:
             sp.start_playback()
-            # global used elsewhere to determine whether to poll API based on playback state:
+            # Reset polling state and exception suppression when manually starting playback
             global continue_keepalive_poll
+            global track_info_exception_raised
+            global keepalive_playback_paused_poll_count
             continue_keepalive_poll = True
-            # debug print only; comment out for production:
-            # print("Set continue_keepalive_poll to True.")
+            track_info_exception_raised = False
+            keepalive_playback_paused_poll_count = 0
     except Exception as e:
         print("~\nWARNING: no information retrieved for current_playback. If you're playing a device, maybe play and pause the player manually, then retry control from this script.")
         print(e)
     update_info_window()
     
 def previous_track():
+    global continue_keepalive_poll
+    global track_info_exception_raised
+    global keepalive_playback_paused_poll_count
+    continue_keepalive_poll = True
+    track_info_exception_raised = False
+    keepalive_playback_paused_poll_count = 0
+
     ret = sp.previous_track()
     update_info_window()
 
 # Function: advance playback to next track
 def next_track():
+    global continue_keepalive_poll
+    global track_info_exception_raised
+    global keepalive_playback_paused_poll_count
+    continue_keepalive_poll = True
+    track_info_exception_raised = False
+    keepalive_playback_paused_poll_count = 0
+
     ret = sp.next_track()
     update_info_window()
 
 # Function: save currently playing track to user library ("like" current song)
 def save_track():
-    info = sp.current_user_playing_track()
     try:
-        playlist_ID = info['context']['external_urls']['spotify']
+        info = sp.current_user_playing_track()
         track_URL = info['item']['external_urls']['spotify']
         track_id = extract_spotify_id(track_URL)
         list_of_track_ids = [track_id]
@@ -271,9 +279,8 @@ def save_track():
         print(e)
 
 def unsave_track():
-    info = sp.current_user_playing_track()
     try:
-        playlist_ID = info['context']['external_urls']['spotify']
+        info = sp.current_user_playing_track()
         track_URL = info['item']['external_urls']['spotify']
         track_id = extract_spotify_id(track_URL)
         list_of_track_ids = [track_id]
@@ -311,7 +318,6 @@ def toggle_playback_shuffle():
 # set playback position to start of current track
 def seek_to_track_start():
     sp.seek_track(0)
-    info = sp.current_playback()['progress_ms']
 
 # set playback position forward or backward by seek_ms (milleseconds, negative or positive)
 def relative_seek(seek_ms):
@@ -322,16 +328,6 @@ def relative_seek(seek_ms):
         new_seek_ms_pos = 0
     sp.seek_track(new_seek_ms_pos)
 
-# adapted from: https://github.com/spotipy-dev/spotipy/blob/master/examples/artist_discography.py
-# def get_artist(name):
-#     results = sp.search(q='artist:' + name, type='artist')
-#     items = results['artists']['items']
-#     if len(items) > 0:
-#         return items[0]
-#     else:
-#         return None
-
-# adapted from: https://github.com/spotipy-dev/spotipy/blob/master/examples/artist_discography.py
 def get_album_tracks(album):
     tracks = []
     results = sp.album_tracks(album['id'])
@@ -339,13 +335,8 @@ def get_album_tracks(album):
     while results['next']:
         results = sp.next(results)
         tracks.extend(results['items'])
-    # for i, track in enumerate(tracks):
-    # for track in tracks:
-        # print(track)
-        # logger.info('%s. %s', i + 1, track['name'])
     return tracks
 
-# adapted from: https://github.com/spotipy-dev/spotipy/blob/master/examples/artist_discography.py
 def get_artist_albums(artist):
     albums = []
     results = sp.artist_albums(artist['id'], album_type='album')
@@ -353,23 +344,7 @@ def get_artist_albums(artist):
     while results['next']:
         results = sp.next(results)
         albums.extend(results['items'])
-    # logger.info('Total albums: %s', len(albums))
-    # unique = set()  # skip duplicate albums
-    # for album in albums:
-        # print(album)
-    #     name = album['name'].lower()
-    #     if name not in unique:
-    #         logger.info('ALBUM: %s', name)
-    #         unique.add(name)
-    #         show_album_tracks(album)
     return albums
-
-# adapted from: https://github.com/spotipy-dev/spotipy/blob/master/examples/artist_discography.py
-# def show_artist(artist):
-#     logger.info('====%s====', artist['name'])
-#     logger.info('Popularity: %s', artist['popularity'])
-#     if len(artist['genres']) > 0:
-#         logger.info('Genres: %s', ','.join(artist['genres']))
 
 # Print information related to currenlty playing track. Also a gatekeeper function returning False if no playing track, and True and a playback info object from sp.current_user_playing_track().
 def print_current_track_information():
@@ -391,13 +366,10 @@ def print_current_track_information():
         print(e)
         return False
 
-# TO DO: simplify other places that print this info if they do? By using this function?
 def print_information():
     print_playlist_1_info()
-    # boolean that may be overriden depending:
     success = True
     info = sp.current_user_playing_track()
-    # because in some settings that can result that info is None or there may be other errors:
     try:
         playlist_ID = info['context']['external_urls']['spotify']
         print("~\nCurrent playlist or ID: ", playlist_ID, sep='')
@@ -433,49 +405,45 @@ def print_information():
     else:
         return True, info
 
-# this function is a stub that creates a threaded function call, because if the called function was not threaded, it would be blocking, as it uses time.sleep. If it weren't threaded, the time.sleep wait could block user hotkey presses, which would annoyingly prevent the user from using the hotkeys during time.sleep. Threaded, it's non-blocking, and the user can use the hotkeys while it's running.
-# First required parameter is an object that is an instance of class GlyphWindow
-# Can take an optional parameter CLI_print which when passed to the threaded function causes it to print info to CLI.
+# Non-blocking thread launcher to update UI display window
 def update_info_window(CLI_print = False):
-    global info_window
-    # pass on the CLI_print parameter:
     thread = threading.Thread(target=threaded_update_info_window, args = [CLI_print])
     thread.start()
 
-# can pass along optional parameter; if this parameter is passed and is anything other than False, info is printed to the CLI about whether the currently playing track is in the user's saved tracks (Liked Songs) :
+# Updates info window glyph with saved track status
 def threaded_update_info_window(CLI_print = False):
-    # It seems that right at script launch, info_window doesn't exist for a bit, so this has to be tried end excepted:
+    global track_info_exception_raised
+
     try:
         info_window.update_glyph("❓")
     except:
         print("No glyph info_window object to update (yet?), apparently.")
-    # wait a bit before calling print track info because it can take a bit before a track change happens:
+    
     time.sleep(0.67)
-    # avoids runtime error of info variable being undeclared:
     info = None
     try:
         info = sp.current_user_playing_track()
+        track_info_exception_raised = False
     except Exception as e:
-        print("In threaded_update_info_window call, error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
-        print(e)
-    if info != None:
+        if not track_info_exception_raised:
+            print("In threaded_update_info_window call, error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
+            print(e)
+            track_info_exception_raised = True
+
+    if info != None and info.get('item'):
         track_id = info['item']['id']
         album = info['item']['album']['name']
-        # truncate to a number of characters displayable in the info window:
         if len(album) > 46:
             album = album[:46] + " ..."
         track_name = info['item']['name']
-        # truncate this also:
         if len(track_name) > 54:
             track_name = track_name[:54] + " ..."
-        # This function expects a list, so track_id is put into on in the call by surrounding it with []:
+        
         is_in_user_saved_tracks = sp.current_user_saved_tracks_contains([track_id])
-        # That's a 1-lenght array, odd. The first and only element in it can be used as True or False:
         if is_in_user_saved_tracks[0]:
             if CLI_print != False:
                 print("💚🎵💛 Currently playing track ID " + track_id + " is in user saved tracks (Liked Songs)!")
             info_window.update_glyph("🖤\n" + album + "\n~ " + track_name)
-            #  + "\n" + album_name + "\n" + track_name
         else:
             if CLI_print != False:
                 print("🖤 Currently playing track ID " + track_id + " is NOT in user saved tracks (Liked Songs).")
@@ -486,37 +454,24 @@ def make_discography_playlist():
     print("Attempting to make discography playlist..")
     to_continue, info = print_information()
     if to_continue:
-        playlist_ID = info['context']['external_urls']['spotify']
         try:
             import random
             artists = info['item']['artists']
             print("  Artist(s):")
             for artist in artists:
-                # optional dev empty of debug.txt:
-                # TO DO: open and close that file only once instead of repeatedly in a loop over artists here?
-                # f = open("debug.txt", "w", encoding='utf_8')
-                # f.write("")
-                # f.close()
                 discography_artist_name = artist['name']; artist_id = artist['id']; artist_URL = artist['external_urls']['spotify']
                 print(" ", discography_artist_name, artist_id, artist_URL)
                 all_artists_tracks = []
-                # all_related_artists_tracks = []
-                # get all albums of artist!
                 albums = get_artist_albums(artist)
-                # get all tracks of albums!
                 print("Collecting and filtering tracks by credit to artist", discography_artist_name, ". .")
                 for album in albums:
                     tracks = get_album_tracks(album)
-                    # check tracks for credit to the artist we're building a playlist for, and only add to an array of tracks if it matches (as artists can end up on albums with other artists where they didn't contribute to other tracks) :
                     for track in tracks:
                         track_artists = track['artists']
                         for track_artist in track_artists:
                             print(". ", end="")
                             if track_artist['name'] == discography_artist_name:
                                 all_artists_tracks.append(track['external_urls']['spotify'])
-                            # TO DO? - make a separate playlist with these? Or a config item to optionally include them?
-                            # else:
-                                # all_related_artists_tracks.append(track['external_urls']['spotify'])
                 print("Done collectiong all tracks for artist. Building discography playlist . . .")
                 random_playlist_name_suffix = ''.join((random.choice(' ▔▀▆▄▂▌▐█▊▎░▒▓▖▗▘▙▚▛▜▝▞▟') for i in range(4)))
                 new_playlist_name = discography_artist_name + " ~" + random_playlist_name_suffix
@@ -524,15 +479,12 @@ def make_discography_playlist():
                 user_id = sp.me()['id']
                 global THIS_SCRIPT_FRIENDLY_NAME
                 playlist_description = 'Everything by this artist on Spotify (or albums etc. in which this artist appears!), courtesy ' + THIS_SCRIPT_FRIENDLY_NAME
-                # function reference: user_playlist_create(user, name, public=True, collaborative=False, description='')
                 new_playlist_info = sp.user_playlist_create(user_id, new_playlist_name, public=True, collaborative=False, description=playlist_description)
                 new_playlist_id = new_playlist_info['external_urls']['spotify']
                 print('new_playlist_id', new_playlist_id)
-                # API reference for this function: "A maximum of 100 items can be added in one request." So, split them up:
-                # Because the list index/slice syntax returns an empty array if we query out of bounds, we can do an infinite loop over elements getting batches of elements from it until it returns empty.
+                
                 idx = 0
                 print("Number of songs collected for playlist: ", len(all_artists_tracks))
-                # . . AND ADD ALL THOSE SONGS TO IT:
                 how_many_at_a_time = 100
                 while True:
                     tracks_to_add = all_artists_tracks[idx:][:how_many_at_a_time]
@@ -541,9 +493,7 @@ def make_discography_playlist():
                         print("Reached end of available tracks to add to playlist.")
                         break
                     else:
-                        # this function call adds to the end of a playlist by default, and we're doing that:
                         try:
-                            # Convert URLs to URIs for the API
                             track_uris = []
                             for track_url in tracks_to_add:
                                 track_id = extract_spotify_id(track_url)
@@ -558,7 +508,6 @@ def make_discography_playlist():
 
 # function: set a playlist for operations (such as adding a song from another playing list)
 def set_playlist_1():
-    # check currently playing context or "playlist", check owner of it, and see if the owner is the same as me. If so, save the playlist ID of it to PLAYLIST_ID_1. If it's not the same as me or there's an error trying to get the "playlist" owner, don't set playlist 1 to anything, and notify me (the user).
     info = sp.current_user_playing_track()
     try:
         playlist_ID = info['context']['external_urls']['spotify']
@@ -571,9 +520,6 @@ def set_playlist_1():
                 PLAYLIST_ID_1 = playlist_ID
                 print("~\n! SET playlist 1.")
                 print_playlist_1_info()
-                # write that to the ini for fast setting again on script reload!
-                # function signature reference:
-                # def set_option(SECTION_NAME, OPTION_NAME, OPTION_VALUE, DESCRIPTIVE_COMMENT = None):
                 set_option('USER_VARIABLES', 'PLAYLIST_ID_1', PLAYLIST_ID_1, 'Optional playlist for track/library moves/deletes:')
             else:
                 print("~\nCurrent playlist not owned by current user. Can't assign to playlist 1.")
@@ -604,26 +550,19 @@ def add_current_track_to_playlist_1():
         print("Can't move anything to playlist 1: playlist 1 not defined.")
         return False
     else:
-        # get currently playing track:
         info = sp.current_user_playing_track()
         track_url = info['item']['external_urls']['spotify']
         track_id = extract_spotify_id(track_url)
         track_uri = f"spotify:track:{track_id}"
-        
-        # Get playlist ID from URI if needed
         playlist_id = extract_spotify_id(PLAYLIST_ID_1)
 
         print_current_track_information()
-        
         print("Retrieving all tracks in target playlist to determine whether track proposed to add is already in playlist . .")
-        # DEPRECATED CALL:
-        # result = sp.playlist_tracks(PLAYLIST_ID_1, fields=None, limit=100, offset=0, market=None)
-        # USE playlist_items INSTEAD of playlist_tracks (updated endpoint)
+        
         result = sp.playlist_items(playlist_id, fields=None, limit=100, offset=0, market=None)
         items = result['items']
         while True:
             for item in items:
-                # The item structure changed: now item['track']['uri'] instead of item['track']['external_urls']['spotify']
                 track_uri_from_target_list = item['track']['uri']
                 if track_uri_from_target_list == track_uri:
                     print('track_uri_from_target_list', track_uri_from_target_list, " == track_uri ", track_uri)
@@ -632,11 +571,8 @@ def add_current_track_to_playlist_1():
             if result['next']:
                 result = sp.next(result)
                 items = result['items']
-                # without this continue statement the program would go on to the code below to add the track, perhaps erroneously :)
                 continue
-            # if the check for whether it's already in the list never returned False, we're good to add the track, and this code will do so:
-            # this function call adds to the end of a playlist by default, and we're doing that:
-            # Now using track_uri instead of list_of_track_ids
+            
             sp.playlist_add_items(playlist_id, [track_uri])
             print("ADDED track to playlist ID", playlist_id)
             print_playlist_1_info()
@@ -654,7 +590,6 @@ def remove_current_track_from_current_playlist():
         print("~\nIn a playlist context; will remove currently playing track from the current playlist.")
         print("Current playlist ID:", playlist_id)
         print("track ID:", track_id)
-        # Updated to use playlist_remove_all_occurrences_of_items with track_uri
         sp.playlist_remove_all_occurrences_of_items(playlist_id, [track_uri])
     except Exception as e:
         print("~\nRemove current track from current playlist: cannot; no playlist context.")
@@ -696,52 +631,6 @@ def unsave_and_move_from_current_playlist_to_discards():
         print("~\nUnsave and shuffle current track to discard playlist: no playlist context; cannot remove currently playing track from any playlist. Printing the error response:")
         print(e)
 
-keepalive_playback_paused_poll_count = 0
-continue_keepalive_poll = True
-# function: if the player is paused, seek 25 ms ahead, sleep for a fraction of a second, then seek back to where it was. attempt to keep the client engaged with the API if playback is paused, which seems to cause at least the API client to forget the player. 
-def keepalive_poll():
-    global keepalive_playback_paused_poll_count
-    global continue_keepalive_poll
-
-    # OPTIONAL: uncomment the remainder of the next four lines to turn this script into a keepalive tool, by using a hotkey (key combination) that does nothing. If you uncomment these lines, nthis will always be run when this function is called:
-    #if 'pyautogui' not in globals():
-    #   import pyautogui
-    #pyautogui.FAILSAFE = False
-    #pyautogui.hotkey('altleft', 'shift', "`")        # a keypress instead would look like: pyautogui.typewrite(['fn', '\r']). DEPRECATED: combo with pageup which led to some applications seeing or using that keystroke as if by itself.
-    #print("pressed keepalive key combo.")
-
-    # NOTE: because this will never execute if that's false, the following boolean must be set True somewhere else!
-    if continue_keepalive_poll:
-        try:
-            info = sp.current_playback()
-            # OPTIONAL info write to txt file; comment out for production:
-            # f = open("debug.txt", "a")        # alternately use this to append instead of overwrite
-            # f = open("debug.txt", "w", encoding='utf_8')
-            # f.write("\n------------------------------------\n")
-            # f.write(json.dumps(info, indent=4))
-            # f.close()
-            # print("------Wrote info from current_playback() call to debug.txt.")
-            if info['is_playing'] == False or info['is_playing'] == None:
-                keepalive_playback_paused_poll_count += 1
-                # debug print only; comment out in production:
-                # print("Playback may be paused; keepalive_playback_paused_poll_count is", keepalive_playback_paused_poll_count)
-                # if we've queried this 4 times and it's paused, stop spamming the API; exit the script.
-                if keepalive_playback_paused_poll_count == 6:
-                    continue_keepalive_poll = False
-                    print("Playback found to be paused through 6 checks; suspending keepalive attempts until you manually resume playback with a hotkey from this script _or_ restart the script.")
-                    # print("Playback found to be paused through 6 checks; quitting script to avoid API queries. Exit code 1.")
-                    # os._exit(1)
-            else:
-                # reset paused playback counter:
-                keepalive_playback_paused_poll_count = 0
-                # debug print only; comment out in production:
-                # print("Playback may be active; keepalive_playback_paused_poll_count is", keepalive_playback_paused_poll_count)
-            # That's it. I'm just hoping that querying playback status keeps this API client authenticated / active as far as the API host is concerned.
-            # print("~\nRan keepalive_poll.")
-        except Exception as e:
-            print("~\nError running function to attempt to retrieve playback info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
-            print(e)
-
 # START BOOKMARK FUNCTIONS REGION
 # NOTE THAT LOAD AND SAVE BOOKMARK HOTKEYS are hard-coded in one of these functions (see below).
 # A BOOKMARK IS A PLAYLIST, TRACK IN THE PLAYLIST, PLAYBACK POSITION IN THE TRACK, AND PLAYLIST NAME.
@@ -770,39 +659,28 @@ def save_bookmark(bookmark_key):
         playlist_name = "None"
         if playlist_id and "playlist" in playlist_id:
             try:
-                # Extract playlist ID from URI for the API call
                 playlist_id_for_api = extract_spotify_id(playlist_id)
                 playlist_info = sp.playlist(playlist_id_for_api, fields="name")
                 playlist_name = playlist_info.get('name', 'Unknown Playlist')
             except:
                 pass
 
-        # Ensure the bookmark section exists and overwrite the values
         if not config.has_section(bookmark_name):
             config.add_section(bookmark_name)
 
-        # Overwrite the existing bookmark
         set_option(bookmark_name, 'playlist_id', playlist_id or 'None')
         set_option(bookmark_name, 'playlist_name', playlist_name)
         set_option(bookmark_name, 'track_id', track_id)
         set_option(bookmark_name, 'position_ms', str(position_ms))
         set_option(bookmark_name, 'key', bookmark_key)
 
-        # Re-read the configuration file to ensure changes are applied?
-        # config.read('Ansible_for_Spotify.ini', encoding='UTF-8')
-        
         print('Bookmark saved (hopefully) for ', bookmark_key, '.')
-
-        # Re-register hotkeys based on the updated INI
         register_bookmark_hotkeys_from_ini()
-
         print(f"Bookmark '{bookmark_name}' saved and hotkeys updated.")
     except Exception as e:
         print(f"\tPossible error saving bookmark.")
         print(e)
 
-
-# Function: Load a bookmark by its second-level key
 def load_bookmark(bookmark_key):
     try:
         bookmark_name = f"BOOKMARK {bookmark_key}"
@@ -827,19 +705,13 @@ def load_bookmark(bookmark_key):
         print(f"\tPossible error loading bookmark.")
         print(e)
 
-
 # ============================================
 # TENT-POLE REORDERING FUNCTIONS
 # ============================================
 
 def get_all_playlist_tracks(playlist_id):
-    """
-    Fetch all tracks from a playlist with pagination.
-    Returns a list of track items in their current order.
-    """
     all_tracks = []
     try:
-        # First page
         results = sp.playlist_items(
             playlist_id, 
             fields='items(track(uri)),next,total',
@@ -847,12 +719,9 @@ def get_all_playlist_tracks(playlist_id):
         )
         all_tracks.extend(results['items'])
         
-        # Subsequent pages
         while results['next']:
             results = sp.next(results)
             all_tracks.extend(results['items'])
-            # Optional: print progress for very large playlists
-            # print(f"Fetched {len(all_tracks)} tracks so far...")
             
         return all_tracks
     except Exception as e:
@@ -860,63 +729,40 @@ def get_all_playlist_tracks(playlist_id):
         return []
 
 def build_reorder_mapping(original_uris, new_order_uris):
-    """
-    Build a mapping of old positions to new positions.
-    Returns a dict: {old_position: new_position}
-    """
-    # Create a map from URI to its new position
     uri_to_new_pos = {uri: idx for idx, uri in enumerate(new_order_uris)}
-    
-    # Build the old->new position mapping
     position_map = {}
     for old_pos, uri in enumerate(original_uris):
         if uri in uri_to_new_pos:
             new_pos = uri_to_new_pos[uri]
-            if old_pos != new_pos:  # Only track positions that actually change
+            if old_pos != new_pos:
                 position_map[old_pos] = new_pos
-    
     return position_map
 
 def reorder_playlist_in_chunks(playlist_id, position_map, total_tracks):
-    """
-    Reorder a playlist using the Spotify reorder API.
-    
-    The API expects:
-    - range_start: start index of the block to move
-    - range_length: how many items to move (default 1)
-    - insert_before: where to insert the moved block
-    
-    To avoid index shifting issues, we process moves in descending order
-    of new position (moving from end to start).
-    """
     if not position_map:
         print("No reordering needed - positions unchanged.")
         return True
     
-    # Sort moves by new position (descending) to avoid index shifts
+    start_time = time.time()
     sorted_moves = sorted(position_map.items(), key=lambda x: x[1], reverse=True)
-    
-    # Process moves in chunks of 100 (API limit for batch operations)
-    # But since we're moving individual items, we can process them one by one
-    # or in small batches. Let's do up to 100 at a time.
-    
+    total_moves = len(sorted_moves)
     success_count = 0
     error_count = 0
+    rate_limit_hits = 0
+    DELAY_BETWEEN_CALLS = 0.46
+    report_every = max(1, min(10, total_moves // 20))
     
-    for old_pos, new_pos in sorted_moves:
+    print(f"Starting reorder of {total_moves} track moves...")
+    if total_moves > 50:
+        print(f"Estimated time: ~{total_moves * DELAY_BETWEEN_CALLS / 60:.1f} minutes")
+    
+    for idx, (old_pos, new_pos) in enumerate(sorted_moves, 1):
         try:
-            # For moving an item to the end, insert_before should be total_tracks
             if new_pos >= total_tracks:
                 insert_before = total_tracks
             else:
                 insert_before = new_pos
                 
-            # If we're moving to a position after the current one,
-            # we need to adjust because removing the item shifts indices.
-            # However, since we process in descending new_pos order,
-            # this handles itself correctly.
-            
-            # Spotify API call: reorder a single item
             sp.playlist_reorder_items(
                 playlist_id,
                 range_start=old_pos,
@@ -925,73 +771,59 @@ def reorder_playlist_in_chunks(playlist_id, position_map, total_tracks):
             )
             success_count += 1
             
-            # Optional: print progress for very large reorders
-            # if success_count % 10 == 0:
-            #     print(f"Reordered {success_count} items...")
+            if idx % report_every == 0 or idx == total_moves:
+                percent = int((idx / total_moves) * 100)
+                elapsed = time.time() - start_time
+                print(f"Progress: {percent}% ({idx}/{total_moves} tracks moved) - Elapsed: {elapsed:.1f}s")
+                
+            if idx < total_moves:
+                time.sleep(DELAY_BETWEEN_CALLS)
                 
         except Exception as e:
-            error_count += 1
-            print(f"Error moving item from position {old_pos} to {new_pos}: {e}")
-            # Continue with other items even if one fails
+            error_msg = str(e)
+            if "rate limit" in error_msg.lower() or "429" in error_msg:
+                rate_limit_hits += 1
+                print(f"WARNING: Rate limit hit! Pausing for 10 seconds...")
+                time.sleep(10)
+                try:
+                    sp.playlist_reorder_items(
+                        playlist_id,
+                        range_start=old_pos,
+                        range_length=1,
+                        insert_before=insert_before
+                    )
+                    success_count += 1
+                    print(f"Retry successful for position {old_pos}")
+                except Exception as retry_error:
+                    error_count += 1
+                    print(f"Retry failed for position {old_pos}: {retry_error}")
+            else:
+                error_count += 1
+                print(f"Error moving item from position {old_pos} to {new_pos}: {e}")
     
-    print(f"Reordering complete: {success_count} items moved, {error_count} errors.")
+    total_time = time.time() - start_time
+    print(f"Reordering complete: {success_count} items moved, {error_count} errors in {total_time:.1f} seconds.")
+    if rate_limit_hits > 0:
+        print(f"  (Recovered from {rate_limit_hits} rate limit hits)")
     return error_count == 0
 
-
-# LOAD AND SAVE BOOKMARK HOTKEYS HARDCODED HERE:
-# Function: Dynamically generate and register bookmark hotkeys from the .ini file
-def register_bookmark_hotkeys_from_ini():
-    dynamic_bindings = []
-    for section in config.sections():
-        if section.startswith("BOOKMARK "):
-            bookmark_key = config.get(section, 'key', fallback=None)
-            if bookmark_key:
-                save_sequence = f"control + alt + shift + b, {bookmark_key}"
-                load_sequence = f"control + alt + shift + l, {bookmark_key}"
-# binding structure: ["hotkey", on_press_callback, on_release_callback, actuate_on_partial_release, press_callback_params, release_callback_params]
-                dynamic_bindings.append([save_sequence, None, save_bookmark, True, None, bookmark_key])
-                dynamic_bindings.append([load_sequence, None, load_bookmark, True, None, bookmark_key])
-                # print(f"Registered hotkeys: '{save_sequence}' (save) and '{load_sequence}' (load) for bookmark '{section}'")
-    
-    # Register the hotkeys
-    for binding in dynamic_bindings:
-        # print('binding: ', binding)
-        # register_hotkey: Register a single keybinding (if it's not already registered). Returns True if the key didn't already exist and was added, else False (the binding is already registered - remove it first if  you wish to overwrite it with new event handlers).
-        if not register_hotkey(binding[0], binding[1], binding[2], binding[3], binding[4], binding[5]):
-            removed_success = remove_hotkey(binding[0])
-            print('removed_success for hotkey that was already registered: ', removed_success)
-            register_hotkey(binding[0], binding[1], binding[2], binding[3], binding[4], binding[5])
-        # else:
-        #     reg_success = register_hotkey(binding[0], binding[1], binding[2], binding[3], binding[4], binding[5])
-        #     print('reg_success for hotkey that was not registered: ', reg_success)
-            
-    # register_hotkeys(dynamic_bindings)
-    # print("Dynamic bookmark hotkeys registered.")
-# END BOOKMARK FUNCTIONS REGION
-
-# tent-pole reordering
+# Hotkey function for tent-pole reordering
 def reorder_playlist_by_tent_pole():
-    """
-    Interactive CLI function that:
-    1. Asks user to pause playback manually
-    2. Asks for playlist URL/ID
-    3. Asks for N (number of tent poles)
-    4. Fetches all tracks from the playlist
-    5. Applies tent-pole sorting
-    6. Confirms changes with user
-    7. Reorders the playlist in-place
-    """
+    global continue_keepalive_poll
+    global track_info_exception_raised
+
     print("\n" + "="*50)
     print("TENT-POLE REORDERING")
     print("="*50)
     
+    # Suspend background checks while in interactive sorting mode
+    continue_keepalive_poll = False
+
     try:
-        # Step 1: Ask user to pause playback
         print("\nIMPORTANT: Please manually pause playback before continuing.")
         print("(This prevents playback jumps/interruptions during reordering)")
         input("Press ENTER when playback is paused...")
         
-        # Step 2: Get playlist ID from user
         print("\nEnter the playlist to reorder:")
         print("(You can paste a Spotify URL, URI, or just the ID)")
         playlist_input = input("Playlist: ").strip()
@@ -1003,7 +835,6 @@ def reorder_playlist_by_tent_pole():
         playlist_id = extract_spotify_id(playlist_input)
         print(f"Using playlist ID: {playlist_id}")
         
-        # Verify playlist exists and get its name
         try:
             playlist_info = sp.playlist(playlist_id, fields="name,owner.display_name")
             playlist_name = playlist_info.get('name', 'Unknown Playlist')
@@ -1013,7 +844,6 @@ def reorder_playlist_by_tent_pole():
             print(f"Could not verify playlist: {e}")
             return
         
-        # Step 3: Get N
         n_input = input("\nNumber of tent poles (default 5, min 2): ").strip()
         N = int(n_input) if n_input else 5
         
@@ -1022,8 +852,6 @@ def reorder_playlist_by_tent_pole():
             return
         
         print(f"Using N={N} tent poles")
-        
-        # Step 4: Fetch all tracks from playlist
         print(f"\nFetching tracks from playlist...")
         track_items = get_all_playlist_tracks(playlist_id)
         
@@ -1031,7 +859,6 @@ def reorder_playlist_by_tent_pole():
             print("No tracks found in playlist.")
             return
         
-        # Filter out None or invalid tracks
         valid_tracks = [t for t in track_items if t and t.get('track')]
         if not valid_tracks:
             print("No valid tracks found in playlist.")
@@ -1040,29 +867,22 @@ def reorder_playlist_by_tent_pole():
         track_count = len(valid_tracks)
         print(f"Found {track_count} tracks.")
         
-        # Check if N is greater than track count
         if N > track_count:
             print(f"Warning: N={N} is greater than track count ({track_count}).")
             print("Proceeding with N = track count.")
             N = track_count
         
-        # Step 5: Get track URIs in current order
         track_uris = [t['track']['uri'] for t in valid_tracks]
-        # Also get track names for debugging (optional)
-        # track_names = [t['track']['name'] for t in valid_tracks]
         
-        # Step 6: Apply tent-pole sorting
         print("\nApplying tent-pole sorting algorithm...")
         print("(This may take a moment for large playlists)")
         sorted_uris = tent_pole_sort.sort_tent_pole(track_uris, N)
         
-        # Step 7: Show summary and confirm
         print(f"\nSorting complete. Playlist will be reordered from:")
         print(f"Original: {track_count} tracks")
         print(f"To: {len(sorted_uris)} tracks")
         print(f"Using N={N} tent poles")
         
-        # Count how many tracks would move
         position_map = build_reorder_mapping(track_uris, sorted_uris)
         moves_needed = len(position_map)
         print(f"{moves_needed} tracks will be moved")
@@ -1071,7 +891,6 @@ def reorder_playlist_by_tent_pole():
             print("No changes needed - playlist is already in tent-pole order.")
             return
         
-        # Ask for confirmation
         print("\nThis will modify the playlist in-place.")
         print("(Track metadata like 'added on' dates will be preserved)")
         confirm = input("Proceed with reordering? (y/N): ").strip().lower()
@@ -1080,12 +899,9 @@ def reorder_playlist_by_tent_pole():
             print("Operation cancelled by user.")
             return
         
-        # Step 8: Perform the reordering
         print(f"\nReordering playlist...")
         print(f"(Processing {moves_needed} track moves...)")
         
-        # For very large playlists, we need to track current positions
-        # The simple approach: process in descending new position order
         success = reorder_playlist_in_chunks(playlist_id, position_map, track_count)
         
         if success:
@@ -1105,28 +921,32 @@ def reorder_playlist_by_tent_pole():
     except Exception as e:
         print(f"\nUnexpected error reordering playlist:")
         print(f"{e}")
-        # Log full error for debugging
         import traceback
         traceback.print_exc()
         print("\nOperation failed. Playlist may be in an inconsistent state.")
+    finally:
+        # Resume background checks and clear exception flags after operation completes or cancels
+        continue_keepalive_poll = True
+        track_info_exception_raised = False
 
-# TO USE??? recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs) re recommendations(seed_artists=None, seed_genres=None, seed_tracks=None, limit=20, country=None, **kwargs)
+def register_bookmark_hotkeys_from_ini():
+    dynamic_bindings = []
+    for section in config.sections():
+        if section.startswith("BOOKMARK "):
+            bookmark_key = config.get(section, 'key', fallback=None)
+            if bookmark_key:
+                save_sequence = f"control + alt + shift + b, {bookmark_key}"
+                load_sequence = f"control + alt + shift + l, {bookmark_key}"
+                dynamic_bindings.append([save_sequence, None, save_bookmark, True, None, bookmark_key])
+                dynamic_bindings.append([load_sequence, None, load_bookmark, True, None, bookmark_key])
+    
+    for binding in dynamic_bindings:
+        if not register_hotkey(binding[0], binding[1], binding[2], binding[3], binding[4], binding[5]):
+            removed_success = remove_hotkey(binding[0])
+            register_hotkey(binding[0], binding[1], binding[2], binding[3], binding[4], binding[5])
+# END BOOKMARK FUNCTIONS REGION
 
-# Declare some key bindings.
-# for bindings object structure see the "Explanation of the binding structure" section in the same page; to copy the variant for square brackets:
-# ["hotkey", on_press_callback, on_release_callback, actuate_on_partial_release, press_callback_params,release_callback_params]
-# Bindings take on the form of:
-#   <binding>, on_press_callback, on_release_callback, actuate_on_partial_release_flag, callback_params
-# Also, a binding that is keys separated by commas is I think a chord? - a _sequence_ of keys or key combination. If for example it's "a, b", then pressing those two keys in sequence (typing one after the other) will trigger it.
-# It's useful to have 'actuate_on_partial_release_flag' set to False, 
-# so your modifier keys don't get in the way of any automatic keyboard output you're doing in response.
-# Note the actual hotkey syntax. Key combinations are denoted via the '+' character, 
-# and additional key chords are separated by commas. Spaces are ignored.
 
-# TO DO: hotkey that prints these bindings with descriptions :)
-# For list of available keys see the section with that heading at https://pypi.org/project/global-hotkeys/
-# also, binding structure: ["hotkey", on_press_callback, on_release_callback, actuate_on_partial_release, press_callback_params, release_callback_params]
-# NOTE: although the documentation for that function says the release callback parameter should be a dict, I could not get that to work and it accepted just a value for it. ?
 bindings = [
     # basic:
     ["control + alt + shift + r", None, change_repeat_mode, True, None, None],
@@ -1148,80 +968,62 @@ bindings = [
     ["control + alt + shift + c", None, make_discography_playlist, False, None, None],
     ["control + alt + shift + i", None, print_information, True, None, None],
     ["control + alt + shift + q", None, exit_program, True, None, None],
-    ["control + alt + shift + t", None, reorder_playlist_by_tent_pole, False, None, None],  # t for tent-pole
+    ["control + alt + shift + t", None, reorder_playlist_by_tent_pole, False, None, None],
 ]
 
-# Register all of our keybindings
 register_hotkeys(bindings)
-
-# Register dynamic keybindings from .ini file.
 register_bookmark_hotkeys_from_ini()
-
-# Finally, start listening for keypresses
 start_checking_hotkeys()
 
-# START: THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
-# re: https://stackoverflow.com/a/2223182
-# THIS IS AN ATTEMPT TO MAINTAIN API CLIENT AWARENESS OF THE MUSIC PLAYER.
-timer_interval = 82
 
-import threading
-def f(f_stop):
-    keepalive_poll()
-    update_info_window()
-    if not f_stop.is_set():
-        # call f() again in timer_interval seconds
-        threading.Timer(timer_interval, f, [f_stop]).start()
-f_stop = threading.Event()
-# start calling f now and every timer_interval seconds thereafter
-f(f_stop)
-# END: THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
-
-# START: OTHER THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
-# re https://stackoverflow.com/a/2223191 - another answer with the above linked, which seems like a far simpler way to implement a repeated threaded task? And maybe would obviate other code my above timer calls needing threading?
-# TO DO: ^ EXAMINE THAT and re-implement it if it is simpler
-# POLL the current playing track ID every N seconds (wait_between_checks), and update the info window glyph if it has changed, to keep display of whether the current playing track is in the user saved tracks (Liked Songs) pretty current:
+# UNIFIED BACKGROUND TIMER & KEEPALIVE POLLING
+# Periodically polls current playing track (every 6.5s) using sp.current_user_playing_track().
+# Handles both active UI info update triggers and keepalive polling in a single thread loop.
 last_remembered_track_id = ''
 wait_between_checks = 6.5
+
 class BackgroundTimer(Thread):
     def run(self):
         global last_remembered_track_id
         global continue_keepalive_poll
-        while 1:
+        global keepalive_playback_paused_poll_count
+        global track_info_exception_raised
+
+        while True:
             time.sleep(wait_between_checks)
-            # only do things if a booloean modified in keepalive_poll() is true; this will avoid pointlessly spamming the API for track info if there's little reason to believe it's updated:
-            # avoids runtime error of info being undeclared:
-            info = None
             if continue_keepalive_poll:
+                info = None
                 try:
                     info = sp.current_user_playing_track()
+                    # Success: clear error logging flag
+                    track_info_exception_raised = False
                 except Exception as e:
-                    print("In repeat timer query of playing track check, controlled by boolean continue_keepalive_poll, error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
-                    print(e)
-                if info != None:
-                    current_track_id = info['item']['id']
-                    if last_remembered_track_id != current_track_id:
+                    if not track_info_exception_raised:
+                        print("In repeat timer query of playing track check, controlled by boolean continue_keepalive_poll, error running function to attempt to retrieve playing track info. If you have an active player, maybe play and pause the player manually, then retry control from this script. OR There was some other error. Printing the error response:")
+                        print(e)
+                        track_info_exception_raised = True
+
+                if info is not None and info.get('is_playing'):
+                    keepalive_playback_paused_poll_count = 0
+                    current_track_id = info['item']['id'] if info.get('item') else None
+                    if current_track_id and last_remembered_track_id != current_track_id:
                         print("Active playback polling: DIFFERENT track ID ", current_track_id, " than last seen " + last_remembered_track_id + " -- will try to update user saved tracks (Liked Songs) track info_window.")
                         update_info_window(CLI_print = True)
                         last_remembered_track_id = current_track_id
-                        # reset this that another loop uses :/ complicated
-                        global keepalive_playback_paused_poll_count
-                        keepalive_playback_paused_poll_count = 0
-            # optional; probably was more useful in development:
-            # else:
-            #     print("Monitoring of playing track info suspended because of paused or unknown playback state over time; to resume track monitoring, unpause playback with the hotkey of this script.")
+                else:
+                    # Increment paused/inactive checks counter when no active item/playing status is returned
+                    keepalive_playback_paused_poll_count += 1
+                    if keepalive_playback_paused_poll_count >= 19:
+                        continue_keepalive_poll = False
+                        print("Playback found to be paused or unavailable through 19 checks (~2 mins); suspending track monitoring until playback is resumed via this script.")
+
 timer = BackgroundTimer()
 timer.start()
-# END: OTHER THINGS BETWEEN THIS AND THE END OF THIS COMMENT WILL RUN INDEFINITELY
 
 import current_track_in_user_tracks_display
-# info_window is a global used all over the place!
 info_window = current_track_in_user_tracks_display.GlyphWindow()
-# info_window.update_glyph("_")
 update_info_window()
 info_window.run()
 
-# everything after this will only run once
-# Monitor global keybindings with an eternal while loop:
 while True:
     time.sleep(0.1)
