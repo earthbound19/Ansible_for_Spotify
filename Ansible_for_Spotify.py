@@ -55,13 +55,15 @@
 # - things in the readme
 
 THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
-SCRIPT_VERSION_STRING = "4.5.7"
+SCRIPT_VERSION_STRING = "4.5.37"
 
 import os
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+from spotipy.exceptions import SpotifyException
 import threading
 from threading import Thread
+from functools import wraps
 
 import tent_pole_sort_for_ansible_for_spotify as tent_pole_sort
 
@@ -180,6 +182,26 @@ def reset_keepalive_state():
     track_info_exception_raised = False
     keepalive_playback_paused_poll_count = 0
 
+# Decorator to catch Spotify exceptions safely in hotkey threads
+def handle_spotify_errors(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            result = func(*args, **kwargs)
+            reset_keepalive_state()
+            return result
+        except SpotifyException as e:
+            if e.http_status == 404:
+                print("~\n[Spotify API 404] No active playback session or valid track found.")
+            elif e.http_status == 403:
+                print(f"~\n[Spotify API 403] Action restricted: {e}")
+            else:
+                print(f"~\n[Spotify Error {e.http_status}]: {e}")
+        except Exception as e:
+            print(f"~\n[Unexpected Error in {func.__name__}]: {e}")
+        return None
+    return wrapper
+
 # Declare functions that key bindings will use.
 # re https://stackoverflow.com/a/1489838 : forget managing threads, just destroy all of them with the whole program execution. DO IT.
 def exit_program():
@@ -197,6 +219,7 @@ def extract_spotify_id(uri_or_url):
     return uri_or_url
 
 # Function to find an active device. Returns the first active device's ID or None if no devices are found.
+@handle_spotify_errors
 def find_active_device():
     try:
         devices = sp.devices()  # Retrieve all available devices
@@ -212,6 +235,7 @@ def find_active_device():
         return None
 
 # Function to switch playback to a specified device using its ID
+@handle_spotify_errors
 def switch_to_device(device_id):
     try:
         sp.transfer_playback(device_id=device_id, force_play=True)
@@ -220,6 +244,7 @@ def switch_to_device(device_id):
         print("Error transferring playback:", e)
 
 # Function: pause or start playback, using other functions to find and switch to an active player if no player found:
+@handle_spotify_errors
 def pause_or_start_playback():
 
     try:
@@ -244,18 +269,21 @@ def pause_or_start_playback():
         print(e)
     update_info_window()
     
+@handle_spotify_errors
 def previous_track():
     reset_keepalive_state()
     ret = sp.previous_track()
     update_info_window()
 
 # Function: advance playback to next track
+@handle_spotify_errors
 def next_track():
     reset_keepalive_state()
     ret = sp.next_track()
     update_info_window()
 
 # Function: save currently playing track to user library ("like" current song)
+@handle_spotify_errors
 def save_track():
     try:
         info = sp.current_user_playing_track()
@@ -270,6 +298,7 @@ def save_track():
         print("~\nCould not save current track (could not add to Liked Songs).")
         print(e)
 
+@handle_spotify_errors
 def unsave_track():
     try:
         info = sp.current_user_playing_track()
@@ -286,6 +315,7 @@ def unsave_track():
 
 # change repeat mode; cycles from current to previous mode and wraps around; e.g. no repeat, playlist repeat, then track repeat:
 REPEAT_MODES = ['track', 'context', 'off']
+@handle_spotify_errors
 def change_repeat_mode():
     global REPEAT_MODES
     retrieved_playback_state = sp.current_playback()['repeat_state']
@@ -297,6 +327,7 @@ def change_repeat_mode():
     sp.repeat(state_parameter)
 
 SHUFFLE_STATES = [True, False]
+@handle_spotify_errors
 def toggle_playback_shuffle():
     global SHUFFLE_STATES
     retrieved_playback_state = sp.current_playback()['shuffle_state']
@@ -308,10 +339,12 @@ def toggle_playback_shuffle():
     sp.shuffle(state_parameter)
 
 # set playback position to start of current track
+@handle_spotify_errors
 def seek_to_track_start():
     sp.seek_track(0)
 
 # set playback position forward or backward by seek_ms (milleseconds, negative or positive)
+@handle_spotify_errors
 def relative_seek(seek_ms):
     # nested function call here: set current playback progress to current + ms (with ms neg. or positive)
     new_seek_ms_pos = int(sp.current_playback()['progress_ms']) + seek_ms
@@ -320,6 +353,7 @@ def relative_seek(seek_ms):
         new_seek_ms_pos = 0
     sp.seek_track(new_seek_ms_pos)
 
+@handle_spotify_errors
 def get_album_tracks(album):
     tracks = []
     results = sp.album_tracks(album['id'])
@@ -329,6 +363,7 @@ def get_album_tracks(album):
         tracks.extend(results['items'])
     return tracks
 
+@handle_spotify_errors
 def get_artist_albums(artist):
     albums = []
     results = sp.artist_albums(artist['id'], album_type='album')
@@ -339,6 +374,7 @@ def get_artist_albums(artist):
     return albums
 
 # Print information related to currenlty playing track. Also a gatekeeper function returning False if no playing track, and True and a playback info object from sp.current_user_playing_track().
+@handle_spotify_errors
 def print_current_track_information():
     try:
         info = sp.current_user_playing_track()
@@ -358,6 +394,7 @@ def print_current_track_information():
         print(e)
         return False
 
+@handle_spotify_errors
 def print_information():
     print_playlist_1_info()
     success = True
@@ -403,6 +440,7 @@ def update_info_window(CLI_print = False):
     thread.start()
 
 # Updates info window glyph with saved track status
+@handle_spotify_errors
 def threaded_update_info_window(CLI_print = False):
     global track_info_exception_raised
 
@@ -442,6 +480,7 @@ def threaded_update_info_window(CLI_print = False):
             info_window.update_glyph("🤍\n~ " + album + "\n ~" + track_name)
 
 # make discography playlist from the artist of the currently playing song.
+@handle_spotify_errors
 def make_discography_playlist():
     print("Attempting to make discography playlist..")
     to_continue, info = print_information()
@@ -499,6 +538,7 @@ def make_discography_playlist():
             print(e)
 
 # function: set a playlist for operations (such as adding a song from another playing list)
+@handle_spotify_errors
 def set_playlist_1():
     info = sp.current_user_playing_track()
     try:
@@ -522,6 +562,7 @@ def set_playlist_1():
         print("~\nCouldn't obtain track info from current context somehow, or other error?")
         print(e)
 
+@handle_spotify_errors
 def print_playlist_1_info():
     global PLAYLIST_ID_1
     if PLAYLIST_ID_1:
@@ -536,6 +577,7 @@ def print_playlist_1_info():
         print("~\nno PLAYLIST_ID_1 is set.")
 
 # Append the currently playing track to playlist 1, if playlist 1 is defined, and only if the track is not already on it.
+@handle_spotify_errors
 def add_current_track_to_playlist_1():
     global PLAYLIST_ID_1
     if PLAYLIST_ID_1 == None:
@@ -571,6 +613,7 @@ def add_current_track_to_playlist_1():
             return True
 
 # function: remove the current song from the current playlist
+@handle_spotify_errors
 def remove_current_track_from_current_playlist():
     info = sp.current_user_playing_track()
     try:
@@ -587,6 +630,7 @@ def remove_current_track_from_current_playlist():
         print("~\nRemove current track from current playlist: cannot; no playlist context.")
         print(e)
 
+@handle_spotify_errors
 def shuffle_current_track_to_playlist_1():
     try:
         proceed = add_current_track_to_playlist_1()
@@ -599,6 +643,7 @@ def shuffle_current_track_to_playlist_1():
         print(f"Error details: {e}")
 
 # Function: if in a playlist context, add currently playing track to discards playlist, remove it from currently playing playlist and user library (liked songs), and play the next song in the playlist.
+@handle_spotify_errors
 def unsave_and_move_from_current_playlist_to_discards():
     info = sp.current_user_playing_track()
     try:
@@ -632,6 +677,7 @@ def unsave_and_move_from_current_playlist_to_discards():
 # - fix difficulty triggering bookmark hotkeys, if possible? I have to press the second hotkey in the sequence so fast. A way to tell the hotkey library to wait longer to register a second key combo in a sequence?
 # - fix that nothing can call the following function unless a bookmark is defined - cannot dynamally make a NEW bookmark definition; WORKAROUND: have initialize_bookmarks_in_ini() pre-save 10 of them which can be overwritten, as they pre-exist:
 # - make it clearer in INI and / or somewhere in code how the chained (sequence) bookmark hotkeys work
+@handle_spotify_errors
 def save_bookmark(bookmark_key):
     try:
         playback = sp.current_playback()
@@ -673,6 +719,7 @@ def save_bookmark(bookmark_key):
         print(f"\tPossible error saving bookmark.")
         print(e)
 
+@handle_spotify_errors
 def load_bookmark(bookmark_key):
     try:
         bookmark_name = f"BOOKMARK {bookmark_key}"
@@ -701,6 +748,7 @@ def load_bookmark(bookmark_key):
 # TENT-POLE REORDERING FUNCTIONS
 # ============================================
 
+@handle_spotify_errors
 def get_all_playlist_tracks(playlist_id):
     all_tracks = []
     try:
@@ -730,6 +778,7 @@ def build_reorder_mapping(original_uris, new_order_uris):
                 position_map[old_pos] = new_pos
     return position_map
 
+@handle_spotify_errors
 def reorder_playlist_in_chunks(playlist_id, position_map, total_tracks):
     if not position_map:
         print("No reordering needed - positions unchanged.")
@@ -800,6 +849,7 @@ def reorder_playlist_in_chunks(playlist_id, position_map, total_tracks):
     return error_count == 0
 
 # Hotkey function for tent-pole reordering
+@handle_spotify_errors
 def reorder_playlist_by_tent_pole():
     global continue_keepalive_poll
 
