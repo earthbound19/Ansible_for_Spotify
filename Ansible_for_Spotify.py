@@ -55,7 +55,7 @@
 # - things in the readme
 
 THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
-SCRIPT_VERSION_STRING = "4.4.0"
+SCRIPT_VERSION_STRING = "4.5.7"
 
 import os
 import spotipy
@@ -171,6 +171,15 @@ continue_keepalive_poll = True
 keepalive_playback_paused_poll_count = 0
 track_info_exception_raised = False
 
+# Helper function to reset keepalive and exception states
+def reset_keepalive_state():
+    global continue_keepalive_poll
+    global track_info_exception_raised
+    global keepalive_playback_paused_poll_count
+    continue_keepalive_poll = True
+    track_info_exception_raised = False
+    keepalive_playback_paused_poll_count = 0
+
 # Declare functions that key bindings will use.
 # re https://stackoverflow.com/a/1489838 : forget managing threads, just destroy all of them with the whole program execution. DO IT.
 def exit_program():
@@ -229,37 +238,20 @@ def pause_or_start_playback():
         else:
             sp.start_playback()
             # Reset polling state and exception suppression when manually starting playback
-            global continue_keepalive_poll
-            global track_info_exception_raised
-            global keepalive_playback_paused_poll_count
-            continue_keepalive_poll = True
-            track_info_exception_raised = False
-            keepalive_playback_paused_poll_count = 0
+            reset_keepalive_state()
     except Exception as e:
         print("~\nWARNING: no information retrieved for current_playback. If you're playing a device, maybe play and pause the player manually, then retry control from this script.")
         print(e)
     update_info_window()
     
 def previous_track():
-    global continue_keepalive_poll
-    global track_info_exception_raised
-    global keepalive_playback_paused_poll_count
-    continue_keepalive_poll = True
-    track_info_exception_raised = False
-    keepalive_playback_paused_poll_count = 0
-
+    reset_keepalive_state()
     ret = sp.previous_track()
     update_info_window()
 
 # Function: advance playback to next track
 def next_track():
-    global continue_keepalive_poll
-    global track_info_exception_raised
-    global keepalive_playback_paused_poll_count
-    continue_keepalive_poll = True
-    track_info_exception_raised = False
-    keepalive_playback_paused_poll_count = 0
-
+    reset_keepalive_state()
     ret = sp.next_track()
     update_info_window()
 
@@ -810,7 +802,6 @@ def reorder_playlist_in_chunks(playlist_id, position_map, total_tracks):
 # Hotkey function for tent-pole reordering
 def reorder_playlist_by_tent_pole():
     global continue_keepalive_poll
-    global track_info_exception_raised
 
     print("\n" + "="*50)
     print("TENT-POLE REORDERING")
@@ -926,8 +917,7 @@ def reorder_playlist_by_tent_pole():
         print("\nOperation failed. Playlist may be in an inconsistent state.")
     finally:
         # Resume background checks and clear exception flags after operation completes or cancels
-        continue_keepalive_poll = True
-        track_info_exception_raised = False
+        reset_keepalive_state()
 
 def register_bookmark_hotkeys_from_ini():
     dynamic_bindings = []
