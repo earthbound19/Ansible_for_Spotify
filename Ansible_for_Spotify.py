@@ -55,7 +55,7 @@
 # - things in the readme
 
 THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
-SCRIPT_VERSION_STRING = "4.5.37"
+SCRIPT_VERSION_STRING = "4.6.10"
 
 import os
 import spotipy
@@ -885,15 +885,32 @@ def reorder_playlist_by_tent_pole():
             print(f"Could not verify playlist: {e}")
             return
         
-        n_input = input("\nNumber of tent poles (default 5, min 2): ").strip()
+        # PROMPT 1: Number of Tent Poles
+        n_input = input("\nNumber of tent poles [Default: 5, min 2]: ").strip()
         N = int(n_input) if n_input else 5
         
         if N < 2:
             print("N must be at least 2. Operation cancelled.")
             return
         
-        print(f"Using N={N} tent poles")
-        print(f"\nFetching tracks from playlist...")
+        # PROMPT 2: Dual-Boundary Mode
+        print("\n--- Dual-Boundary Mode ---")
+        print("Standard (No) [Default]: Starts and ends at high-valence peak poles.")
+        print("Dual-Boundary (Yes): Appends & prepends to outer poles (low-to-high start, high-to-low end).")
+        dual_input = input("Enable Dual-Boundary mode? (y/N) [Default: N]: ").strip().lower()
+        dual_boundary_poles = True if dual_input in ['y', 'yes'] else False
+
+        # PROMPT 3: Reverse Source List
+        print("\n--- Reverse Source List ---")
+        print("Note: If Dual-Boundary mode is enabled, reversing the source list yields the same")
+        print("overall shape as Dual-Boundary enabled without reversing (starts and ends low),")
+        print("but swaps which specific low/high tracks end up at the beginning vs. the end")
+        print("of the playlist.")
+        reverse_input = input("Reverse source list before sorting? (y/N) [Default: N]: ").strip().lower()
+        reverse_source = True if reverse_input in ['y', 'yes'] else False
+        
+        print(f"\nConfiguration: N={N} poles | Dual-Boundary: {dual_boundary_poles} | Reverse Source: {reverse_source}")
+        print(f"Fetching tracks from playlist...")
         track_items = get_all_playlist_tracks(playlist_id)
         
         if not track_items:
@@ -915,9 +932,20 @@ def reorder_playlist_by_tent_pole():
         
         track_uris = [t['track']['uri'] for t in valid_tracks]
         
+        # Apply source reversal if requested
+        if reverse_source:
+            track_uris.reverse()
+            print("Source track list reversed.")
+        
         print("\nApplying tent-pole sorting algorithm...")
         print("(This may take a moment for large playlists)")
-        sorted_uris = tent_pole_sort.sort_tent_pole(track_uris, N)
+        
+        # Execute sort with dual_boundary parameter
+        sorted_uris = tent_pole_sort.sort_tent_pole(
+            track_uris, 
+            N, 
+            dual_boundary=dual_boundary_poles
+        )
         
         print(f"\nSorting complete. Playlist will be reordered from:")
         print(f"Original: {track_count} tracks")
@@ -929,11 +957,11 @@ def reorder_playlist_by_tent_pole():
         print(f"{moves_needed} tracks will be moved")
         
         if moves_needed == 0:
-            print("No changes needed - playlist is already in tent-pole order.")
+            print("No changes needed - playlist is already in the requested tent-pole order.")
             return
         
         print("\nThis will modify the playlist in-place.")
-        print("(Track metadata like 'added on' dates will be preserved)")
+        print("(Track metadata like 'Date Added' will be preserved)")
         confirm = input("Proceed with reordering? (y/N): ").strip().lower()
         
         if confirm != 'y' and confirm != 'yes':

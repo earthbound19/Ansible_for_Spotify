@@ -8,10 +8,12 @@
 # Originating use for varied but contiguous-ish Spotify playist sorting by valence
 # (happiness). In detail:
 # - builds tent-pole placement order using dyadic recursive interval bisection
-# - tent Pole 1 (start pole): values are strictly postfixed (appended)
-# - tent Pole N (end pole): values are strictly prefixed (prepended)
+# - tent Pole 1 (start pole): values are strictly postfixed (appended) by default
+# - tent Pole N (end pole): values are strictly prefixed (prepended) by default
 # - interior poles: alternates append/prepend to create U-shaped sine waves
 # - concentrates sine-wave distribution across interior tent poles
+# - supports dual_boundary mode: alternates append/prepend on boundary poles (1 & N) 
+#   to build a low-to-high start and high-to-low end valley curve.
 #
 # Originating usage: a source list of spotify tracks (as copied directly from a
 # playlist via the desktop app UI) sorted by descending valence, via tools like:
@@ -48,12 +50,13 @@
 #   across sub-intervals.
 
 # USAGE (STANDALONE SCRIPT MODE)
-# tent_pole_sort_for_ansible_for_spotify.py [-i <source file>] [-n <number of tent poles>] [-v]
+# tent_pole_sort_for_ansible_for_spotify.py [-i <source file>] [-n <number of tent poles>] [-d] [-v]
 #
 # OPTIONS:
 #   -i, --inputfile             Path to source text file. If omitted, input is read from system clipboard.
 #   -n, --number-of-tentpoles   Number of tent poles. If omitted, defaults to 5. Must be at least 2.
 #                               may break if N > number of items in source list.
+#   -d, --dual-boundary         Appends and prepends to outer poles (low-to-high start, high-to-low end).
 #   -v, --verbose               Print debug info (item count, N, placement order, and destination details).
 #
 # OUTPUT TARGET FORMAT:
@@ -89,10 +92,10 @@
 
 # IMPORTABLE MODULE USAGE:
 #    from tent_pole_sort_for_ansible_for_spotify import sort_tent_pole, build_bisection_tent_poles
-#    sorted_list = sort_tent_pole(original_list, N)
+#    sorted_list = sort_tent_pole(original_list, N, dual_boundary=False)
 
 # CODE
-scriptVersion = "1.0.48"
+scriptVersion = "1.1.17"
 
 import argparse
 import os
@@ -152,12 +155,16 @@ def build_bisection_tent_poles(N):
 # STEP 2: Distribute items into tent-pole positions
 # ============================================
 
-def sort_tent_pole(items, N=None):
+def sort_tent_pole(items, N=None, dual_boundary=False):
     """
     Maps source items to tent poles with boundary rules:
-    - Tent Pole 1 (start pole): strictly postfixed (appended)
-    - Tent Pole N (end pole): strictly prefixed (prepended)
-    - Interior Poles (2 to N-1): alternates append/prepend for U-shaped waves
+    - Standard (dual_boundary=False):
+      * Tent Pole 1 (start pole): strictly postfixed (appended)
+      * Tent Pole N (end pole): strictly prefixed (prepended)
+      * Interior Poles (2 to N-1): alternates append/prepend for U-shaped waves
+    - Dual-Boundary (dual_boundary=True):
+      * Boundary Poles (1 and N) also alternate append/prepend to construct
+        a low-to-high ascending start and high-to-low descending tail.
     
     This function works with any list of items (strings, URIs, IDs, etc.)
     """
@@ -185,14 +192,14 @@ def sort_tent_pole(items, N=None):
         for idx, item in enumerate(items):
             tent_pos = placement_order[idx % pattern_len]
             
-            if tent_pos == 1:
+            if tent_pos == 1 and not dual_boundary:
                 # Start Pole: strictly postfix (append)
                 segments[tent_pos].append(item)
-            elif tent_pos == N:
+            elif tent_pos == N and not dual_boundary:
                 # End Pole: strictly prefix (prepend)
                 segments[tent_pos].insert(0, item)
             else:
-                # Interior Poles: alternate append / prepend to build U-waves
+                # Interior Poles (or Outer Poles if dual_boundary=True): alternate append / prepend
                 if phase[tent_pos] % 2 == 0:
                     segments[tent_pos].append(item)
                 else:
@@ -242,6 +249,11 @@ def main():
         help='Number of tent poles (defaults to 5 if omitted)'
     )
     parser.add_argument(
+        '-d', '--dual-boundary',
+        action='store_true',
+        help='Appends and prepends to outer poles (low-to-high start, high-to-low end)'
+    )
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Display verbose debug logging'
@@ -276,11 +288,11 @@ def main():
         sys.exit(1)
         
     if args.verbose:
-        print(f"Sorting {len(items)} items across N={N} tent poles", file=sys.stderr)
+        print(f"Sorting {len(items)} items across N={N} tent poles (Dual Boundary: {args.dual_boundary})", file=sys.stderr)
         tent_poles = build_bisection_tent_poles(N)
         print(f"Bisection placement order: {tent_poles}", file=sys.stderr)
         
-    result = sort_tent_pole(items, N)
+    result = sort_tent_pole(items, N, dual_boundary=args.dual_boundary)
     
     # Save results to file or clipboard
     if use_clipboard:
