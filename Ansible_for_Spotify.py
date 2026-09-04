@@ -3,7 +3,7 @@
 
 # DEPENDENCIES
 # - a Spotify developer app with cryptography secrets shared with this script.
-# - Python, with spotipy, keyboard, and screeninfo libraries
+# - Python, with extended_configparser, spotipy, keyboard, and screeninfo libraries installed
 # Install python librarires via:
 #    pip install <library name, like spotipy, etc.>
 # - A web host you control, to upload /ansible-web-auth-php/index.php at
