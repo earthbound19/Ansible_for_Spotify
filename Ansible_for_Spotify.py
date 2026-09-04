@@ -1,11 +1,11 @@
 # DESCRIPTION
-# Does various Spotify playback, playlist and user library modifitions with hotkeys (keyboard shortcuts), via Python, with the os, spotipy and the global_hotkeys library.
+# Does various Spotify playback, playlist and user library modifitions with hotkeys (keyboard shortcuts), via Python, with the os, spotipy and the keyboard library.
 
 # DEPENDENCIES
 # - a Spotify developer app with cryptography secrets shared with this script.
-# - Python and the Spotipy library
-# Install spotipy via:
-#    pip install spotipy --upgrade
+# - Python, with spotipy, keyboard, and screeninfo libraries
+# Install python librarires via:
+#    pip install <library name, like spotipy, etc.>
 # - A web host you control, to upload /ansible-web-auth-php/index.php at
 #  - set the permissions for the containing folder to 755
 #  - set the permissions for index.php to 644
@@ -14,9 +14,8 @@
 #
 # Alternate install method for Spotipy:
 #    pip install git+https://github.com/plamere/spotipy.git@master
-# install python global hotkeys via:
-#    pip install global-hotkeys -U
-# code for hotkeys here adapted from example at: https://pypi.org/project/global-hotkeys/
+# install python keyboard library via:
+#    pip install keyboard
 
 # USAGE
 # Install dependencies (See DEPENDENCIES), and run this script with Python, like so, from the directory it is in:
@@ -134,6 +133,15 @@ if (BACK_SEEK_MS > 0):
 FORWARD_SEEK_MS = int(set_option_if_not('USER_VARIABLES', 'FORWARD_SEEK_MS', 'On skip forward, skip this many ms e.g. 5000ms = 5 seconds:', True))
 # PLAYLIST_ID_1 will here be init as None from the function call if it's not found in the .ini; otherwise it will be set to what is found:
 PLAYLIST_ID_1 = set_option_if_not('USER_VARIABLES', 'PLAYLIST_ID_1', 'Optional playlist for track/library moves/deletes:', False)
+
+# WINDOW SETTINGS DEFAULTS
+WIN_POS_X = set_option_if_not('WINDOW_SETTINGS', 'pos_x', 'Last saved X window position:', False)
+WIN_POS_Y = set_option_if_not('WINDOW_SETTINGS', 'pos_y', 'Last saved Y window position:', False)
+if WIN_POS_X is None:
+    WIN_POS_X = '100'
+if WIN_POS_Y is None:
+    WIN_POS_Y = '100'
+
 # END INI PARSER create / read variables from ini into global variables
 # !--------------------------------------------------------------------
 
@@ -164,8 +172,8 @@ AUTH_MANAGER = SpotifyOAuth(client_id=CLIENT_ID, client_secret=CLIENT_SECRET, re
 # Instantiate API client.
 sp = spotipy.Spotify(auth_manager=AUTH_MANAGER)
 
-# hotkeys setup:
-from global_hotkeys import *
+# hotkeys setup using Python keyboard library:
+import keyboard
 import time
 
 # Declare global control flags for polling & exception suppression
@@ -504,7 +512,7 @@ def make_discography_playlist():
                             if track_artist['name'] == discography_artist_name:
                                 all_artists_tracks.append(track['external_urls']['spotify'])
                 print("Done collectiong all tracks for artist. Building discography playlist . . .")
-                random_playlist_name_suffix = ''.join((random.choice(' ▔▀▆▄▂▌▐█▊▎░▒▓▖▗▘▙▚▛▜▝▞▟') for i in range(4)))
+                random_playlist_name_suffix = ''.join((random.choice(' ▔▀▆▄▂▌▐█▖▗▘▙▚▛▜▝▞▟') for i in range(4)))
                 new_playlist_name = discography_artist_name + " ~" + random_playlist_name_suffix
                 print("MAKING PLAYLIST: ", new_playlist_name)
                 user_id = sp.me()['id']
@@ -669,14 +677,8 @@ def unsave_and_move_from_current_playlist_to_discards():
         print(e)
 
 # START BOOKMARK FUNCTIONS REGION
-# NOTE THAT LOAD AND SAVE BOOKMARK HOTKEYS are hard-coded in one of these functions (see below).
 # A BOOKMARK IS A PLAYLIST, TRACK IN THE PLAYLIST, PLAYBACK POSITION IN THE TRACK, AND PLAYLIST NAME.
 # Function: Save the current playback as a bookmark with a specific key
-# TO DO:
-# - fix that on saving ANY bookmark it throws: Possible error saving bookmark: The hotkey [[['control', 'alt', 'shift', 'b'], ['1']]] is already registered.
-# - fix difficulty triggering bookmark hotkeys, if possible? I have to press the second hotkey in the sequence so fast. A way to tell the hotkey library to wait longer to register a second key combo in a sequence?
-# - fix that nothing can call the following function unless a bookmark is defined - cannot dynamally make a NEW bookmark definition; WORKAROUND: have initialize_bookmarks_in_ini() pre-save 10 of them which can be overwritten, as they pre-exist:
-# - make it clearer in INI and / or somewhere in code how the chained (sequence) bookmark hotkeys work
 @handle_spotify_errors
 def save_bookmark(bookmark_key):
     try:
@@ -713,8 +715,7 @@ def save_bookmark(bookmark_key):
         set_option(bookmark_name, 'key', bookmark_key)
 
         print('Bookmark saved (hopefully) for ', bookmark_key, '.')
-        register_bookmark_hotkeys_from_ini()
-        print(f"Bookmark '{bookmark_name}' saved and hotkeys updated.")
+        print(f"Bookmark '{bookmark_name}' saved.")
     except Exception as e:
         print(f"\tPossible error saving bookmark.")
         print(e)
@@ -743,6 +744,34 @@ def load_bookmark(bookmark_key):
     except Exception as e:
         print(f"\tPossible error loading bookmark.")
         print(e)
+
+# Sequence hotkey response modal helper (uses Python keyboard library to allow human-speed keypresses)
+def listen_for_bookmark_slot(action_type):
+    print(f"\n[BOOKMARK {action_type.upper()}] Listening for slot key (0-9) for 2.5 seconds...")
+    start_time = time.time()
+    
+    # Listen for 2.5 seconds for any digit press
+    while time.time() - start_time < 2.5:
+        for digit in range(10):
+            key_str = str(digit)
+            if keyboard.is_pressed(key_str):
+                print(f"[BOOKMARK] Selected slot '{key_str}' to {action_type}.")
+                if action_type == 'save':
+                    save_bookmark(key_str)
+                elif action_type == 'load':
+                    load_bookmark(key_str)
+                return
+        time.sleep(0.02)
+        
+    print(f"[BOOKMARK {action_type.upper()}] Timed out waiting for slot number.")
+
+def trigger_bookmark_save():
+    threading.Thread(target=listen_for_bookmark_slot, args=('save',)).start()
+
+def trigger_bookmark_load():
+    threading.Thread(target=listen_for_bookmark_slot, args=('load',)).start()
+
+# END BOOKMARK FUNCTIONS REGION
 
 # ============================================
 # TENT-POLE REORDERING FUNCTIONS
@@ -997,51 +1026,47 @@ def reorder_playlist_by_tent_pole():
         # Resume background checks and clear exception flags after operation completes or cancels
         reset_keepalive_state()
 
-def register_bookmark_hotkeys_from_ini():
-    dynamic_bindings = []
-    for section in config.sections():
-        if section.startswith("BOOKMARK "):
-            bookmark_key = config.get(section, 'key', fallback=None)
-            if bookmark_key:
-                save_sequence = f"control + alt + shift + b, {bookmark_key}"
-                load_sequence = f"control + alt + shift + l, {bookmark_key}"
-                dynamic_bindings.append([save_sequence, None, save_bookmark, True, None, bookmark_key])
-                dynamic_bindings.append([load_sequence, None, load_bookmark, True, None, bookmark_key])
-    
-    for binding in dynamic_bindings:
-        if not register_hotkey(binding[0], binding[1], binding[2], binding[3], binding[4], binding[5]):
-            removed_success = remove_hotkey(binding[0])
-            register_hotkey(binding[0], binding[1], binding[2], binding[3], binding[4], binding[5])
-# END BOOKMARK FUNCTIONS REGION
 
-
+# Unified hotkey registration array using Python keyboard library syntax
 bindings = [
     # basic:
-    ["control + alt + shift + r", None, change_repeat_mode, True, None, None],
-    ["control + alt + shift + f", None, toggle_playback_shuffle, False, None, None],
-    ["control + alt + shift + home", None, pause_or_start_playback, True, None, None],
-    ["control + alt + shift + insert", None, seek_to_track_start, True, None, None],
-    ["control + alt + shift + left", None, relative_seek, True, None, BACK_SEEK_MS],
-    ["control + alt + shift + right", None, relative_seek, True, None, FORWARD_SEEK_MS],
-    ["control + alt + shift + page_up", None, previous_track, True, None, None],
-    ["control + alt + shift + page_down", None, next_track, True, None, None],
-    ["control + alt + shift + s", None, save_track, True, None, None],
-    ["control + alt + shift + u", None, unsave_track, True, None, None],
+    ["ctrl+alt+shift+r", change_repeat_mode, None],
+    ["ctrl+alt+shift+f", toggle_playback_shuffle, None],
+    ["ctrl+alt+shift+home", pause_or_start_playback, None],
+    ["ctrl+alt+shift+insert", seek_to_track_start, None],
+    ["ctrl+alt+shift+left", relative_seek, BACK_SEEK_MS],
+    ["ctrl+alt+shift+right", relative_seek, FORWARD_SEEK_MS],
+    ["ctrl+alt+shift+page up", previous_track, None],
+    ["ctrl+alt+shift+page down", next_track, None],
+    ["ctrl+alt+shift+s", save_track, None],
+    ["ctrl+alt+shift+u", unsave_track, None],
     # advanced:
-    ["control + alt + shift + d", None, remove_current_track_from_current_playlist, False, None, None],
-    ["control + alt + shift + x", None, unsave_and_move_from_current_playlist_to_discards, False, None, None],
-    ["control + alt + shift + 1", None, set_playlist_1, False, None, None],
-    ["control + alt + shift + a", None, add_current_track_to_playlist_1, True, None, None],
-    ["control + alt + shift + m", None, shuffle_current_track_to_playlist_1, False, None, None],
-    ["control + alt + shift + c", None, make_discography_playlist, False, None, None],
-    ["control + alt + shift + i", None, print_information, True, None, None],
-    ["control + alt + shift + q", None, exit_program, True, None, None],
-    ["control + alt + shift + t", None, reorder_playlist_by_tent_pole, False, None, None],
+    ["ctrl+alt+shift+d", remove_current_track_from_current_playlist, None],
+    ["ctrl+alt+shift+x", unsave_and_move_from_current_playlist_to_discards, None],
+    ["ctrl+alt+shift+1", set_playlist_1, None],
+    ["ctrl+alt+shift+a", add_current_track_to_playlist_1, None],
+    ["ctrl+alt+shift+m", shuffle_current_track_to_playlist_1, None],
+    ["ctrl+alt+shift+c", make_discography_playlist, None],
+    ["ctrl+alt+shift+i", print_information, None],
+    ["ctrl+alt+shift+q", exit_program, None],
+    ["ctrl+alt+shift+t", reorder_playlist_by_tent_pole, None],
+    # bookmark sequences (modal triggers):
+    ["ctrl+alt+shift+b", trigger_bookmark_save, None],
+    ["ctrl+alt+shift+l", trigger_bookmark_load, None],
 ]
 
-register_hotkeys(bindings)
-register_bookmark_hotkeys_from_ini()
-start_checking_hotkeys()
+def register_all_hotkeys():
+    for item in bindings:
+        combo = item[0]
+        func = item[1]
+        args = item[2]
+        if args is not None:
+            keyboard.add_hotkey(combo, lambda f=func, a=args: f(a))
+        else:
+            keyboard.add_hotkey(combo, func)
+    print("Registered all hotkeys via 'keyboard' library.")
+
+register_all_hotkeys()
 
 
 # UNIFIED BACKGROUND TIMER & KEEPALIVE POLLING
@@ -1090,6 +1115,20 @@ timer.start()
 
 import current_track_in_user_tracks_display
 info_window = current_track_in_user_tracks_display.GlyphWindow()
+
+# Setup INI save event callback on Tkinter window movement
+def on_window_move(event):
+    if event.widget == info_window.root:
+        x = info_window.root.winfo_x()
+        y = info_window.root.winfo_y()
+        if str(x) != config.get('WINDOW_SETTINGS', 'pos_x', fallback='') or str(y) != config.get('WINDOW_SETTINGS', 'pos_y', fallback=''):
+            set_option('WINDOW_SETTINGS', 'pos_x', str(x))
+            set_option('WINDOW_SETTINGS', 'pos_y', str(y))
+
+# Restore position from INI and bind movement callback
+info_window.root.geometry(f"+{WIN_POS_X}+{WIN_POS_Y}")
+info_window.root.bind('<Configure>', on_window_move)
+
 update_info_window()
 info_window.run()
 
