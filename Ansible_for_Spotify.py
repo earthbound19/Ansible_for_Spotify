@@ -3,7 +3,7 @@
 
 # DEPENDENCIES
 # - a Spotify developer app with cryptography secrets shared with this script.
-# - Python, with extended_configparser, spotipy, keyboard, and screeninfo libraries installed
+# - Python, with spotipy, keyboard, and screeninfo libraries
 # Install python librarires via:
 #    pip install <library name, like spotipy, etc.>
 # - A web host you control, to upload /ansible-web-auth-php/index.php at
@@ -54,7 +54,7 @@
 # - things in the readme
 
 THIS_SCRIPT_FRIENDLY_NAME = "Ansible for Spotify"
-SCRIPT_VERSION_STRING = "4.6.10"
+SCRIPT_VERSION_STRING = "4.12.44"
 
 import os
 import spotipy
@@ -63,6 +63,7 @@ from spotipy.exceptions import SpotifyException
 import threading
 from threading import Thread
 from functools import wraps
+from screeninfo import get_monitors
 
 import tent_pole_sort_for_ansible_for_spotify as tent_pole_sort
 
@@ -137,10 +138,26 @@ PLAYLIST_ID_1 = set_option_if_not('USER_VARIABLES', 'PLAYLIST_ID_1', 'Optional p
 # WINDOW SETTINGS DEFAULTS
 WIN_POS_X = set_option_if_not('WINDOW_SETTINGS', 'pos_x', 'Last saved X window position:', False)
 WIN_POS_Y = set_option_if_not('WINDOW_SETTINGS', 'pos_y', 'Last saved Y window position:', False)
-if WIN_POS_X is None:
-    WIN_POS_X = '100'
-if WIN_POS_Y is None:
-    WIN_POS_Y = '100'
+
+def validate_window_position(x_str, y_str):
+    """Validates if saved (X, Y) coordinates lie within any active monitor's bounds."""
+    try:
+        x = int(x_str)
+        y = int(y_str)
+        
+        # Check against every active display monitor
+        for m in get_monitors():
+            # Check if (x, y) falls within monitor bounds
+            if m.x <= x <= (m.x + m.width - 20) and m.y <= y <= (m.y + m.height - 20):
+                return str(x), str(y)
+    except Exception as e:
+        print(f"Warning checking screen bounds: {e}")
+        
+    print("[WINDOW] Saved position is off-screen or invalid. Relocating to (10, 10).")
+    return '10', '10'
+
+# Validate and clamp position
+WIN_POS_X, WIN_POS_Y = validate_window_position(WIN_POS_X, WIN_POS_Y)
 
 # END INI PARSER create / read variables from ini into global variables
 # !--------------------------------------------------------------------
@@ -678,13 +695,20 @@ def unsave_and_move_from_current_playlist_to_discards():
 
 # START BOOKMARK FUNCTIONS REGION
 # A BOOKMARK IS A PLAYLIST, TRACK IN THE PLAYLIST, PLAYBACK POSITION IN THE TRACK, AND PLAYLIST NAME.
-# Function: Save the current playback as a bookmark with a specific key
+
+import sys
+
+# Standardize section names in INI: force lowercase and strip whitespace (e.g., "Chill Vibes" -> "BOOKMARK chill vibes")
+def get_bookmark_section_name(bookmark_key):
+    normalized_key = str(bookmark_key).strip().lower()
+    return f"BOOKMARK {normalized_key}"
+
 @handle_spotify_errors
 def save_bookmark(bookmark_key):
     try:
         playback = sp.current_playback()
         if not playback:
-            print("No playback context found. Cannot save bookmark.")
+            print("\n[BOOKMARK] No playback context found. Cannot save bookmark.")
             return
 
         playlist_id = playback['context']['uri'] if playback.get('context') else None
@@ -692,10 +716,11 @@ def save_bookmark(bookmark_key):
         position_ms = playback['progress_ms']
 
         if not track_id:
-            print("No track currently playing. Cannot save bookmark.")
+            print("\n[BOOKMARK] No track currently playing. Cannot save bookmark.")
             return
 
-        bookmark_name = f"BOOKMARK {bookmark_key}"
+        normalized_key = str(bookmark_key).strip().lower()
+        section_name = get_bookmark_section_name(normalized_key)
         playlist_name = "None"
         if playlist_id and "playlist" in playlist_id:
             try:
@@ -705,33 +730,40 @@ def save_bookmark(bookmark_key):
             except:
                 pass
 
-        if not config.has_section(bookmark_name):
-            config.add_section(bookmark_name)
+        if not config.has_section(section_name):
+            config.add_section(section_name)
 
-        set_option(bookmark_name, 'playlist_id', playlist_id or 'None')
-        set_option(bookmark_name, 'playlist_name', playlist_name)
-        set_option(bookmark_name, 'track_id', track_id)
-        set_option(bookmark_name, 'position_ms', str(position_ms))
-        set_option(bookmark_name, 'key', bookmark_key)
+        set_option(section_name, 'playlist_id', playlist_id or 'None')
+        set_option(section_name, 'playlist_name', playlist_name)
+        set_option(section_name, 'track_id', track_id)
+        set_option(section_name, 'position_ms', str(position_ms))
+        set_option(section_name, 'key', normalized_key)
 
-        print('Bookmark saved (hopefully) for ', bookmark_key, '.')
-        print(f"Bookmark '{bookmark_name}' saved.")
+        print(f"\n[BOOKMARK] Saved '{normalized_key}' -> {playlist_name}")
     except Exception as e:
-        print(f"\tPossible error saving bookmark.")
-        print(e)
+        print(f"\n[BOOKMARK] Error saving bookmark '{bookmark_key}': {e}")
 
 @handle_spotify_errors
 def load_bookmark(bookmark_key):
     try:
-        bookmark_name = f"BOOKMARK {bookmark_key}"
-        if not config.has_section(bookmark_name):
-            print(f"No bookmark found for key '{bookmark_key}'.")
+        normalized_key = str(bookmark_key).strip().lower()
+        target_section_name = get_bookmark_section_name(normalized_key)
+        
+        # Scan all existing sections case-insensitively to match existing/manual entries
+        found_section = None
+        for section in config.sections():
+            if section.lower() == target_section_name.lower():
+                found_section = section
+                break
+
+        if not found_section:
+            print(f"\n[BOOKMARK] No bookmark found titled '{normalized_key}'.")
             return
 
-        playlist_id = config.get(bookmark_name, 'playlist_id', fallback=None)
-        playlist_name = config.get(bookmark_name, 'playlist_name', fallback='Unknown Playlist')
-        track_id = config.get(bookmark_name, 'track_id', fallback=None)
-        position_ms = int(config.get(bookmark_name, 'position_ms', fallback=0))
+        playlist_id = config.get(found_section, 'playlist_id', fallback=None)
+        playlist_name = config.get(found_section, 'playlist_name', fallback='Unknown Playlist')
+        track_id = config.get(found_section, 'track_id', fallback=None)
+        position_ms = int(config.get(found_section, 'position_ms', fallback=0))
 
         if playlist_id and playlist_id != 'None':
             sp.start_playback(context_uri=playlist_id, offset={'uri': f"spotify:track:{track_id}"})
@@ -739,37 +771,85 @@ def load_bookmark(bookmark_key):
             sp.start_playback(uris=[f"spotify:track:{track_id}"])
 
         sp.seek_track(position_ms)
-        print(f"Loaded bookmark '{playlist_id}'")
-        print(f"Playlist Name '{playlist_name}'.")
+        print(f"\n[BOOKMARK] Loaded '{normalized_key}' -> {playlist_name}")
     except Exception as e:
-        print(f"\tPossible error loading bookmark.")
-        print(e)
+        print(f"\n[BOOKMARK] Error loading bookmark '{bookmark_key}': {e}")
 
-# Sequence hotkey response modal helper (uses Python keyboard library to allow human-speed keypresses)
-def listen_for_bookmark_slot(action_type):
-    print(f"\n[BOOKMARK {action_type.upper()}] Listening for slot key (0-9) for 2.5 seconds...")
-    start_time = time.time()
-    
-    # Listen for 2.5 seconds for any digit press
-    while time.time() - start_time < 2.5:
-        for digit in range(10):
-            key_str = str(digit)
-            if keyboard.is_pressed(key_str):
-                print(f"[BOOKMARK] Selected slot '{key_str}' to {action_type}.")
-                if action_type == 'save':
-                    save_bookmark(key_str)
-                elif action_type == 'load':
-                    load_bookmark(key_str)
-                return
-        time.sleep(0.02)
+# String accumulation listening modal with terminal HUD, sliding timer, and instant Enter key submission
+def listen_for_bookmark_title(action_type):
+    buffer = ""
+    timeout_duration = 2.5
+    last_keystroke_time = time.time()
+    done_event = threading.Event()
+
+    print(f"\n[BOOKMARK {action_type.upper()}] Mode Active. Type title (Press ENTER or wait 2.5s)...")
+    sys.stdout.write(f"\r> Title: {buffer}")
+    sys.stdout.flush()
+
+    def on_key_event(event):
+        nonlocal buffer, last_keystroke_time
+        if event.event_type != keyboard.KEY_DOWN:
+            return
+
+        name = event.name
         
-    print(f"[BOOKMARK {action_type.upper()}] Timed out waiting for slot number.")
+        # Handle Enter / Return to immediately finish typing
+        if name in ('enter', 'return'):
+            done_event.set()
+            return
+
+        # Handle Backspace / Delete editing
+        if name in ('backspace', 'delete'):
+            if len(buffer) > 0:
+                buffer = buffer[:-1]
+                last_keystroke_time = time.time()
+                # Clear terminal line and redraw prompt
+                sys.stdout.write("\r\033[K" + f"> Title: {buffer}")
+                sys.stdout.flush()
+            return
+
+        # Spacebar key name translation
+        if name == 'space':
+            name = ' '
+
+        # Accept only single-character printable inputs (supports extended Unicode/diacritics)
+        if len(name) == 1 and name.isprintable():
+            buffer += name
+            last_keystroke_time = time.time()
+            sys.stdout.write("\r" + f"> Title: {buffer}")
+            sys.stdout.flush()
+
+    # Hook keyboard event listener
+    hook = keyboard.hook(on_key_event)
+
+    try:
+        while not done_event.is_set():
+            time.sleep(0.05)
+            # Check sliding window timer
+            if time.time() - last_keystroke_time >= timeout_duration:
+                done_event.set()
+    finally:
+        keyboard.unhook(hook)
+
+    # Finalize string processing (forcing lowercase for case-insensitive matching)
+    final_title = buffer.strip().lower()
+    print("") # Move off terminal HUD line
+    
+    if not final_title:
+        print(f"[BOOKMARK {action_type.upper()}] Cancelled (empty string).")
+        return
+
+    print(f"[BOOKMARK {action_type.upper()}] Finalizing for: '{final_title}'")
+    if action_type == 'save':
+        save_bookmark(final_title)
+    elif action_type == 'load':
+        load_bookmark(final_title)
 
 def trigger_bookmark_save():
-    threading.Thread(target=listen_for_bookmark_slot, args=('save',)).start()
+    threading.Thread(target=listen_for_bookmark_title, args=('save',)).start()
 
 def trigger_bookmark_load():
-    threading.Thread(target=listen_for_bookmark_slot, args=('load',)).start()
+    threading.Thread(target=listen_for_bookmark_title, args=('load',)).start()
 
 # END BOOKMARK FUNCTIONS REGION
 
@@ -1073,7 +1153,7 @@ register_all_hotkeys()
 # Periodically polls current playing track (every 6.5s) using sp.current_user_playing_track().
 # Handles both active UI info update triggers and keepalive polling in a single thread loop.
 last_remembered_track_id = ''
-wait_between_checks = 6.5
+wait_between_checks = 3.7       # formerly: 6.5
 
 class BackgroundTimer(Thread):
     def run(self):
@@ -1103,12 +1183,16 @@ class BackgroundTimer(Thread):
                         print("Active playback polling: DIFFERENT track ID ", current_track_id, " than last seen " + last_remembered_track_id + " -- will try to update user saved tracks (Liked Songs) track info_window.")
                         update_info_window(CLI_print = True)
                         last_remembered_track_id = current_track_id
-                else:
+                # toying with deprecating the following entirely -- commenting out,
+                # as I have the impression Spotify is aggressively invalidating API
+                # connections; with this else clause commented out we keep the heartbeat
+                # alive always:
+                # else:
                     # Increment paused/inactive checks counter when no active item/playing status is returned
-                    keepalive_playback_paused_poll_count += 1
-                    if keepalive_playback_paused_poll_count >= 19:
-                        continue_keepalive_poll = False
-                        print("Playback found to be paused or unavailable through 19 checks (~2 mins); suspending track monitoring until playback is resumed via this script.")
+                    # keepalive_playback_paused_poll_count += 1
+                    # if keepalive_playback_paused_poll_count >= 42:
+                        # continue_keepalive_poll = False
+                        # print("Playback found to be paused or unavailable through 19 checks (~2 mins); suspending track monitoring until playback is resumed via this script.")
 
 timer = BackgroundTimer()
 timer.start()
@@ -1118,10 +1202,19 @@ info_window = current_track_in_user_tracks_display.GlyphWindow()
 
 # Setup INI save event callback on Tkinter window movement
 def on_window_move(event):
+    # Ensure event comes directly from root, not internal children
     if event.widget == info_window.root:
         x = info_window.root.winfo_x()
         y = info_window.root.winfo_y()
-        if str(x) != config.get('WINDOW_SETTINGS', 'pos_x', fallback='') or str(y) != config.get('WINDOW_SETTINGS', 'pos_y', fallback=''):
+        
+        # Ignore temporary negative/unmapped coordinates during initialization
+        if x < -5000 or y < -5000:
+            return
+            
+        saved_x = config.get('WINDOW_SETTINGS', 'pos_x', fallback='')
+        saved_y = config.get('WINDOW_SETTINGS', 'pos_y', fallback='')
+        
+        if str(x) != saved_x or str(y) != saved_y:
             set_option('WINDOW_SETTINGS', 'pos_x', str(x))
             set_option('WINDOW_SETTINGS', 'pos_y', str(y))
 
