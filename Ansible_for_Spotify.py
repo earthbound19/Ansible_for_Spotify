@@ -1047,7 +1047,7 @@ def reorder_playlist_by_tent_pole():
             print("Source track list reversed.")
         
         print("\nApplying tent-pole sorting algorithm...")
-        print("(This may take a moment for large playlists)")
+        print("(This may take a long time for large playlists)")
         
         # Execute sort with dual_boundary parameter
         sorted_uris = tent_pole_sort.sort_tent_pole(
@@ -1107,6 +1107,198 @@ def reorder_playlist_by_tent_pole():
         reset_keepalive_state()
 
 
+# ============================================
+# TRACK FIND AND REPLACE
+# ============================================
+
+@handle_spotify_errors
+def find_and_replace_track():
+    global continue_keepalive_poll
+    # Suspend background keepalive polling to prevent CLI input stream collisions
+    continue_keepalive_poll = False
+    try:
+        print("\n" + "="*50)
+        print("TRACK FIND AND REPLACE")
+        print("="*50)
+        
+        # 2. Input & Validation (Source Track)
+        source_input = input("Enter Source Track (ID, URI, or URL): ").strip()
+        if not source_input:
+            print("No input provided. Cancelled.")
+            return
+        source_id = extract_spotify_id(source_input)
+        
+        try:
+            source_track = sp.track(source_id)
+            if source_track['type'] != 'track':
+                print("Source is not a track. Cancelled.")
+                return
+        except Exception as e:
+            print(f"Error validating source track: {e}")
+            return
+            
+        source_uri = source_track['uri']
+        print(f"Source Track: {source_track['name']} by {source_track['artists'][0]['name']}")
+        
+        # 3. Monolithic Library Scan (API Limitations Handled)
+        print("Scanning owned playlists and Liked Songs (this may take a long time depending on the number and length of playlists you own)...")
+        user_id = sp.me()['id']
+        
+        def fetch_with_backoff(func, *args, **kwargs):
+            # Wrapper to safely absorb HTTP 429 rate limits
+            while True:
+                try:
+                    return func(*args, **kwargs)
+                except spotipy.SpotifyException as e:
+                    if e.http_status == 429:
+                        retry_after = 3
+                        if hasattr(e, 'headers') and 'Retry-After' in e.headers:
+                            retry_after = int(e.headers['Retry-After'])
+                        print(f"\n[Rate Limit] Backing off for {retry_after}s...")
+                        time.sleep(retry_after)
+                    else:
+                        raise e
+
+        matching_playlists = []
+        playlists = fetch_with_backoff(sp.current_user_playlists, limit=50)
+        
+        # --- NEW: Initialize scan counter ---
+        tracks_scanned = 0
+        
+        while playlists:
+            for pl in playlists['items']:
+                # Skip non-owned playlists
+                if pl['owner']['id'] == user_id:
+                    pl_id = pl['id']
+                    has_track = False
+                    
+                    # Fetch items using minimal field filtering
+                    pl_items = fetch_with_backoff(sp.playlist_items, pl_id, fields="items(track(id)),next")
+                    while pl_items and not has_track:
+                        for item in pl_items['items']:
+                            # --- NEW: Increment and print in-place every 7th track ---
+                            tracks_scanned += 1
+                            if tracks_scanned % 7 == 0:
+                                print(f"\rScanning... {tracks_scanned} tracks checked.", end="", flush=True)
+                            
+                            if item and item.get('track') and item['track'].get('id') == source_id:
+                                has_track = True
+                                matching_playlists.append(pl)
+                                break
+                        if has_track or not pl_items.get('next'):
+                            break
+                        pl_items = fetch_with_backoff(sp.next, pl_items)
+            
+            if playlists['next']:
+                playlists = fetch_with_backoff(sp.next, playlists)
+            else:
+                break
+        
+        # --- NEW: Clear the in-place line and print final count ---
+        print(f"\rScan complete. {tracks_scanned} total tracks checked." + " " * 20)
+        
+        # Liked Songs Check
+        is_saved_resp = fetch_with_backoff(sp.current_user_saved_tracks_contains, [source_id])
+        is_saved = is_saved_resp[0] if is_saved_resp else False
+        
+        if not matching_playlists and not is_saved:
+            print("\nSummary: 0 occurrences found in owned playlists or Liked Songs. Exiting gracefully.")
+            return
+            
+        print(f"\nSummary:")
+        print(f" - Found in {len(matching_playlists)} matching owned playlist(s).")
+        print(f" - Liked Songs status: {'Present' if is_saved else 'Not present'}")
+        
+        # 4. Input & Validation (Replacement Track)
+        target_input = input("\nEnter Replacement Track (ID, URI, or URL): ").strip()
+        if not target_input:
+            print("No replacement provided. Cancelled.")
+            return
+        target_id = extract_spotify_id(target_input)
+        
+        try:
+            target_track = sp.track(target_id)
+            if target_track['type'] != 'track':
+                print("Replacement is not a track. Cancelled.")
+                return
+        except Exception as e:
+            print(f"Error validating replacement track: {e}")
+            return
+            
+        target_uri = target_track['uri']
+        print(f"Replacement Track: {target_track['name']} by {target_track['artists'][0]['name']}")
+        
+        # 5. User Confirmation
+        print(f"\nSCOPE CONFIRMATION:")
+        print(f"Will replace '{source_track['name']}' with '{target_track['name']}' in:")
+        print(f" - {len(matching_playlists)} Playlist(s)")
+        print(f" - Liked Songs (Present: {is_saved})")
+        
+        confirm = input("\nExecute replacement? (y/N): ").strip().lower()
+        if confirm not in ['y', 'yes']:
+            print("Operation cancelled by user.")
+            return
+            
+        # 6. Execution Strategy (Data-Driven Live Indexing)
+        for pl in matching_playlists:
+            pl_id = pl['id']
+            print(f"Processing playlist: '{pl['name']}'...")
+            
+            while True:
+                original_index = -1
+                offset = 0
+                
+                # Fetch live playlist items and find initial index of source_id
+                while True:
+                    live_items = fetch_with_backoff(sp.playlist_items, pl_id, fields="items(track(id)),next", offset=offset)
+                    for idx, item in enumerate(live_items['items']):
+                        if item and item.get('track') and item['track'].get('id') == source_id:
+                            original_index = offset + idx
+                            break
+                    if original_index != -1 or not live_items.get('next'):
+                        break
+                    offset += len(live_items['items'])
+                    
+                if original_index == -1:
+                    # No more occurrences left in this playlist
+                    break
+                    
+                # Insert target_id at position=original_index
+                fetch_with_backoff(sp.playlist_add_items, pl_id, [target_uri], position=original_index)
+                
+                # Perform a second live query immediately after insertion to get the updated live index of source_id
+                new_index = -1
+                offset = 0
+                while True:
+                    live_items_updated = fetch_with_backoff(sp.playlist_items, pl_id, fields="items(track(id)),next", offset=offset)
+                    for idx, item in enumerate(live_items_updated['items']):
+                        if item and item.get('track') and item['track'].get('id') == source_id:
+                            new_index = offset + idx
+                            break
+                    if new_index != -1 or not live_items_updated.get('next'):
+                        break
+                    offset += len(live_items_updated['items'])
+                    
+                if new_index != -1:
+                    # Delete source_id using exact positional array specification
+                    fetch_with_backoff(sp.playlist_remove_specific_occurrences_of_items, pl_id, [{"uri": source_uri, "positions": [new_index]}])
+                else:
+                    print(f"Warning: Could not find source track '{source_track['name']}' to delete in '{pl['name']}' after insertion.")
+                    break
+                    
+        # Liked Songs processing
+        if is_saved:
+            print("Processing Liked Songs...")
+            fetch_with_backoff(sp.current_user_saved_tracks_add, [target_id])
+            fetch_with_backoff(sp.current_user_saved_tracks_delete, [source_id])
+            
+        print("\nReplacement complete!")
+
+    finally:
+        # Safely restore polling
+        reset_keepalive_state()
+
+
 # Unified hotkey registration array using Python keyboard library syntax
 bindings = [
     # basic:
@@ -1130,6 +1322,7 @@ bindings = [
     ["ctrl+alt+shift+i", print_information, None],
     ["ctrl+alt+shift+q", exit_program, None],
     ["ctrl+alt+shift+t", reorder_playlist_by_tent_pole, None],
+    ["ctrl+alt+shift+w", find_and_replace_track, None],
     # bookmark sequences (modal triggers):
     ["ctrl+alt+shift+b", trigger_bookmark_save, None],
     ["ctrl+alt+shift+l", trigger_bookmark_load, None],
